@@ -399,39 +399,56 @@ def next_level():
 
 
 def cell_html(r, c):
+    """Return one board tile as compact HTML.
+
+    Important: do not indent the returned HTML. Markdown treats 4 leading
+    spaces as a code block, which caused the forest grid to show raw HTML on
+    Streamlit Cloud.
+    """
     pos = (r, c)
     contents = []
     title = "Forest"
+    tile_class = "terrain"
+
     if pos == st.session_state.genie_pos:
         contents.append("🧞")
-        title = "Genie cave"
+        title = "Genie Cave"
+        tile_class = "genie"
+
     rock = rock_at(pos)
     if rock:
         contents.append(rock["kind"])
         title = f"Rock HP {rock['hp']}/{rock['max_hp']}"
+        tile_class = "rock"
+
     for enemy in st.session_state.enemies:
         if enemy["pos"] == pos and enemy["hp"] > 0:
             if enemy["type"] == "boss":
                 contents.append("👑🧔")
                 title = f"Boss HP {enemy['hp']}/{enemy['max_hp']}"
+                tile_class = "boss"
             else:
                 contents.append("🧔")
                 title = f"Caveman HP {enemy['hp']}/{enemy['max_hp']}"
+                tile_class = "enemy"
+
     if st.session_state.ninja_pos == pos and st.session_state.ninja_hp > 0:
         contents.append("🥷")
-        title = "Ninja helper"
+        title = "Ninja Helper"
+        tile_class = "ninja"
+
     if st.session_state.dino_pos == pos:
         contents.append("🦖")
         title = "T-Rex"
+        tile_class = "dino"
+
     if not contents:
-        contents.append(random.choice(["🌲", "🌳", "🌿", "🍃"]))
+        # Stable decoration based on position so the board does not flicker.
+        forest = ["🌲", "🌳", "🌿", "🍃"]
+        contents.append(forest[(r * 3 + c * 5 + st.session_state.level) % len(forest)])
+
     label = " ".join(contents)
-    return f"""
-    <div class='forest-cell' title='{title}'>
-        <div class='cell-emoji'>{label}</div>
-        <div class='cell-coord'>{title}</div>
-    </div>
-    """
+    return f"<div class='forest-cell {tile_class}' title='{title}'><div class='cell-emoji'>{label}</div><div class='cell-label'>{title}</div></div>"
 
 
 def render_board():
@@ -633,79 +650,133 @@ def sidebar():
 def css():
     st.markdown(
         """
-        <style>
-        .stApp {
-            background: radial-gradient(circle at top, #1f6b45 0%, #0d3d2c 45%, #06251b 100%);
-            color: white;
-        }
-        section[data-testid="stSidebar"] {
-            background: #062217;
-        }
-        .story-card, .log-item {
-            background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.18);
-            border-radius: 16px;
-            padding: 16px;
-            margin-bottom: 10px;
-        }
-        .hud {
-            display:flex;
-            flex-wrap:wrap;
-            gap:10px;
-            margin: 12px 0 18px 0;
-        }
-        .hud span {
-            background: rgba(255,255,255,0.14);
-            border: 1px solid rgba(255,255,255,0.20);
-            padding: 10px 14px;
-            border-radius: 999px;
-            font-weight: 700;
-        }
-        .forest-grid {
-            display:grid;
-            gap:8px;
-            padding: 14px;
-            background: linear-gradient(135deg, rgba(10,64,37,0.9), rgba(7,42,31,0.9));
-            border-radius: 20px;
-            border: 2px solid rgba(255,255,255,0.18);
-            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
-        }
-        .forest-cell {
-            min-height: 82px;
-            border-radius: 16px;
-            background: linear-gradient(135deg, rgba(46,120,75,0.95), rgba(21,80,50,0.95));
-            border: 1px solid rgba(255,255,255,0.18);
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            text-align:center;
-            box-shadow: inset 0 0 18px rgba(255,255,255,0.04);
-        }
-        .forest-cell:hover {
-            transform: translateY(-2px);
-            outline: 2px solid rgba(255,255,255,0.25);
-        }
-        .cell-emoji {
-            font-size: 32px;
-            line-height: 1.1;
-            min-height: 38px;
-        }
-        .cell-coord {
-            font-size: 10px;
-            opacity: 0.72;
-            margin-top: 4px;
-        }
-        div.stButton > button {
-            border-radius: 14px;
-            min-height: 46px;
-            font-weight: 800;
-        }
-        </style>
+<style>
+:root {
+    --cream: #fff8e7;
+    --ink: #172016;
+    --deep: #0b3b24;
+    --forest: #1f7a45;
+    --leaf: #42b66b;
+    --sun: #ffe08a;
+    --rock: #d7d0c1;
+    --card: #ffffff;
+}
+.stApp {
+    background: linear-gradient(180deg, #e8ffe8 0%, #c5f6c9 34%, #86d993 100%);
+    color: var(--ink);
+}
+/* Make text readable even when Streamlit theme defaults are dark. */
+.stMarkdown, .stText, p, li, label, h1, h2, h3, h4, h5, h6, span, div {
+    color: var(--ink);
+}
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #f7ffe9 0%, #d7f8cf 100%);
+    border-right: 2px solid rgba(34, 96, 46, 0.25);
+}
+section[data-testid="stSidebar"] * {
+    color: var(--ink) !important;
+}
+[data-testid="stMetricValue"], [data-testid="stMetricLabel"] {
+    color: var(--ink) !important;
+}
+.story-card, .log-item {
+    background: rgba(255, 255, 255, 0.92);
+    border: 2px solid rgba(34, 96, 46, 0.18);
+    border-radius: 18px;
+    padding: 16px;
+    margin-bottom: 10px;
+    box-shadow: 0 8px 20px rgba(18, 87, 40, 0.12);
+    color: var(--ink) !important;
+}
+.hud {
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin: 12px 0 18px 0;
+}
+.hud span {
+    background: #ffffff;
+    color: var(--ink) !important;
+    border: 2px solid rgba(34, 96, 46, 0.18);
+    padding: 10px 14px;
+    border-radius: 999px;
+    font-weight: 800;
+    box-shadow: 0 4px 10px rgba(18, 87, 40, 0.10);
+}
+.forest-grid {
+    display:grid;
+    gap:8px;
+    padding: 14px;
+    background: linear-gradient(135deg, #14552f, #1c7a43 55%, #134626);
+    border-radius: 22px;
+    border: 4px solid #6b4f2a;
+    box-shadow: 0 18px 40px rgba(44, 86, 35, 0.25), inset 0 0 0 4px rgba(255,255,255,0.16);
+    width: 100%;
+}
+.forest-cell {
+    min-height: 76px;
+    border-radius: 16px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    border: 2px solid rgba(255,255,255,0.55);
+    box-shadow: inset 0 -10px 20px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.10);
+    color: var(--ink) !important;
+    overflow: hidden;
+}
+.forest-cell.terrain { background: linear-gradient(135deg, #76d46e, #3ea65c); }
+.forest-cell.rock { background: linear-gradient(135deg, #eee3cf, #b8aa91); border-color:#fff7de; }
+.forest-cell.enemy { background: linear-gradient(135deg, #ffd9a3, #ff9e52); border-color:#fff0c2; }
+.forest-cell.boss { background: linear-gradient(135deg, #ffbd59, #e4572e); border-color:#fff0c2; }
+.forest-cell.genie { background: linear-gradient(135deg, #d7c8ff, #8f79df); border-color:#ffffff; }
+.forest-cell.ninja { background: linear-gradient(135deg, #dadada, #5a5a5a); border-color:#ffffff; }
+.forest-cell.dino { background: linear-gradient(135deg, #fff176, #52c84d); border: 3px solid #fff7a8; transform: scale(1.03); }
+.forest-cell:hover {
+    transform: translateY(-2px);
+    outline: 3px solid rgba(255, 247, 168, 0.85);
+}
+.cell-emoji {
+    font-size: 34px;
+    line-height: 1.05;
+    min-height: 38px;
+    color: var(--ink) !important;
+}
+.cell-label {
+    font-size: 10px;
+    line-height: 1.1;
+    font-weight: 800;
+    margin-top: 4px;
+    color: #112115 !important;
+    text-shadow: 0 1px rgba(255,255,255,0.55);
+}
+div.stButton > button {
+    border-radius: 16px;
+    min-height: 48px;
+    font-weight: 900;
+    color: #152015 !important;
+    background: #ffffff !important;
+    border: 2px solid rgba(34, 96, 46, 0.22) !important;
+    box-shadow: 0 5px 12px rgba(18, 87, 40, 0.14);
+}
+div.stButton > button:hover {
+    border-color: #1f7a45 !important;
+    background: #fff8d7 !important;
+}
+[data-testid="stInfo"] {
+    background: #fff8d7;
+    color: var(--ink);
+    border: 1px solid #e5c75d;
+}
+[data-testid="stCaptionContainer"] p {
+    color: #1f3322 !important;
+    font-weight: 600;
+}
+</style>
         """,
         unsafe_allow_html=True,
     )
-
 
 def main():
     init_state()
