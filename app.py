@@ -6,121 +6,146 @@ import streamlit as st
 
 st.set_page_config(page_title="Dino Hangry Rocks", page_icon="🦖", layout="wide")
 
-# -----------------------------
-# Kid-friendly game configuration
-# -----------------------------
 MAX_LEVEL = 50
 NINJA_UNLOCK_LEVEL = 6
-BOSS_LEVEL_INTERVAL = 10
-
-FOODS = ["🍖", "🥩", "🍗", "🥥", "🍉", "🍌", "🍎"]
-ROCK_ICONS = ["🪨", "⛰️", "🧱", "💎"]
+BOSS_INTERVAL = 10
+DIRECTIONS = {
+    "up": (-1, 0),
+    "down": (1, 0),
+    "left": (0, -1),
+    "right": (0, 1),
+}
+FOODS = ["🍖", "🥩", "🍗", "🍉", "🍌", "🥥"]
 CRYSTAL_PIECES = ["🔷", "🔹", "💠", "🔸", "🔶", "✨"]
 
 
 @dataclass
 class LevelConfig:
     level: int
-    is_boss: bool
-    rock_hp: int
+    board_size: int
     rock_count: int
+    rock_hp: int
     food_goal: int
     cavemen: int
-    arrows: int
+    dino_hp: int
+    ninja_hp: int
+    moves: int
     genie_chance: float
     boss_hp: int
-    dino_max_hp: int
-    ninja_max_hp: int
-    moves: int
+    is_boss: bool
 
 
-def level_config(level: int) -> LevelConfig:
-    """Creates a gentle difficulty curve for kids under 12."""
-    is_boss = level % BOSS_LEVEL_INTERVAL == 0
+def cfg_for(level: int) -> LevelConfig:
     tier = (level - 1) // 10
-    rock_hp = 2 + tier + min(5, level // 8)
-    rock_count = 3 + min(7, level // 5)
-    food_goal = 2 + min(7, level // 7)
-    cavemen = 1 + min(6, level // 8)
-    arrows = min(6, level // 9)
-    genie_chance = min(0.38, 0.08 + level * 0.004)
-    boss_hp = 0 if not is_boss else 18 + level * 3
-    dino_max_hp = 34 + min(26, level // 2)
-    ninja_max_hp = 0 if level < NINJA_UNLOCK_LEVEL else 16 + min(18, level // 3)
-    moves = 16 + max(0, 8 - tier) + (4 if is_boss else 0)
-    return LevelConfig(level, is_boss, rock_hp, rock_count, food_goal, cavemen, arrows, genie_chance, boss_hp, dino_max_hp, ninja_max_hp, moves)
+    is_boss = level % BOSS_INTERVAL == 0
+    return LevelConfig(
+        level=level,
+        board_size=7 if level < 16 else 8 if level < 36 else 9,
+        rock_count=5 + min(11, level // 3),
+        rock_hp=3 + tier + min(6, level // 8),
+        food_goal=2 + min(6, level // 8),
+        cavemen=1 + min(8, level // 6) + (3 if is_boss else 0),
+        dino_hp=38 + min(28, level // 2),
+        ninja_hp=0 if level < NINJA_UNLOCK_LEVEL else 18 + min(25, level // 3),
+        moves=28 + max(0, 10 - tier) + (8 if is_boss else 0),
+        genie_chance=min(0.34, 0.07 + level * 0.004),
+        boss_hp=0 if not is_boss else 28 + level * 3,
+        is_boss=is_boss,
+    )
 
 
-def init_state():
-    defaults = {
-        "level": 1,
-        "screen": "intro",
-        "xp": 0,
-        "wins": 0,
-        "losses": 0,
-        "message": "Welcome to Dino Hangry Rocks!",
-        "log": [],
-        "mini_started_at": None,
-        "mini_sequence": [],
-        "mini_progress": [],
-        "mini_seconds": 25,
-    }
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
+def clamp(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def empty_cells(board_size: int):
+    return [(r, c) for r in range(board_size) for c in range(board_size)]
+
+
+def manhattan(a, b) -> int:
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+def random_cell(open_cells):
+    cell = random.choice(open_cells)
+    open_cells.remove(cell)
+    return cell
 
 
 def add_log(text: str):
     st.session_state.log.insert(0, text)
-    st.session_state.log = st.session_state.log[:6]
+    st.session_state.log = st.session_state.log[:10]
 
 
-def clamp_progress(value: float) -> float:
-    """Streamlit progress bars must stay between 0.0 and 1.0."""
-    try:
-        return max(0.0, min(1.0, float(value)))
-    except (TypeError, ValueError):
-        return 0.0
+def init_state():
+    defaults = {
+        "screen": "intro",
+        "level": 1,
+        "wins": 0,
+        "losses": 0,
+        "xp": 0,
+        "log": [],
+        "message": "Welcome to Dino Hangry Rocks!",
+        "mini_sequence": [],
+        "mini_progress": [],
+        "mini_started": None,
+        "mini_seconds": 28,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
 
 def start_level(level: int):
-    cfg = level_config(level)
-    rocks = []
+    cfg = cfg_for(level)
+    open_cells = empty_cells(cfg.board_size)
+    dino_pos = (cfg.board_size - 1, cfg.board_size // 2)
+    open_cells.remove(dino_pos)
+    genie_pos = (0, cfg.board_size // 2)
+    if genie_pos in open_cells:
+        open_cells.remove(genie_pos)
+
+    rocks = {}
+    food_positions = set(random.sample(range(cfg.rock_count), min(cfg.food_goal + 1, cfg.rock_count)))
     for i in range(cfg.rock_count):
-        hidden_food = random.random() < 0.58
-        hp = cfg.rock_hp + random.randint(0, max(1, cfg.level // 12))
-        rocks.append({
-            "name": f"Rock {i + 1}",
+        pos = random_cell(open_cells)
+        hp = cfg.rock_hp + random.randint(0, max(1, level // 15))
+        rocks[pos] = {
             "hp": hp,
             "max_hp": hp,
-            "food": random.choice(FOODS) if hidden_food else None,
-            "icon": random.choice(ROCK_ICONS),
-        })
+            "food": random.choice(FOODS) if i in food_positions else None,
+            "kind": random.choice(["🪨", "⛰️", "🧱"]),
+        }
+
+    enemies = []
+    for i in range(cfg.cavemen):
+        if not open_cells:
+            break
+        enemies.append({"type": "caveman", "pos": random_cell(open_cells), "hp": 8 + level // 5, "max_hp": 8 + level // 5})
+    if cfg.is_boss and open_cells:
+        enemies.append({"type": "boss", "pos": random_cell(open_cells), "hp": cfg.boss_hp, "max_hp": cfg.boss_hp})
+
+    st.session_state.board_size = cfg.board_size
+    st.session_state.dino_pos = dino_pos
+    st.session_state.ninja_pos = None if level < NINJA_UNLOCK_LEVEL else (cfg.board_size - 1, max(0, cfg.board_size // 2 - 1))
+    st.session_state.genie_pos = genie_pos
     st.session_state.rocks = rocks
+    st.session_state.enemies = enemies
     st.session_state.food_found = 0
-    st.session_state.dino_hp = cfg.dino_max_hp
-    st.session_state.ninja_hp = cfg.ninja_max_hp
+    st.session_state.dino_hp = cfg.dino_hp
+    st.session_state.dino_max_hp = cfg.dino_hp
+    st.session_state.ninja_hp = cfg.ninja_hp
+    st.session_state.ninja_max_hp = cfg.ninja_hp
     st.session_state.moves_left = cfg.moves
-    st.session_state.cavemen_left = cfg.cavemen
-    st.session_state.boss_hp = cfg.boss_hp
     st.session_state.genie_mischief = 0
-    st.session_state.screen = "battle"
-    st.session_state.message = f"Level {level}: Break rocks, find food, and calm the T-Rex's hangry-ness!"
+    st.session_state.screen = "play"
     st.session_state.log = []
-    add_log("🧞 The genie hides food under the rocks.")
+    st.session_state.message = f"Level {level}: Move the T-Rex through the forest, smash rocks, and find food!"
+    add_log("🧞 The genie hid food under rocks around the forest.")
     if level == NINJA_UNLOCK_LEVEL:
         add_log("🥷 The ninja helper has joined your team!")
-
-
-def start_mini_game():
-    pieces = CRYSTAL_PIECES[:]
-    random.shuffle(pieces)
-    st.session_state.mini_sequence = pieces
-    st.session_state.mini_progress = []
-    st.session_state.mini_started_at = time.time()
-    st.session_state.mini_seconds = max(12, 28 - st.session_state.level // 3)
-    st.session_state.screen = "mini"
-    st.session_state.message = "Crystal Puzzle! Put the pieces back together before time runs out."
+    if cfg.is_boss:
+        add_log("👑 Boss level! Defeat the mighty caveman hunter.")
 
 
 def reset_game():
@@ -129,362 +154,576 @@ def reset_game():
     init_state()
 
 
-def apply_enemy_turn(cfg: LevelConfig):
-    if st.session_state.cavemen_left <= 0 and not cfg.is_boss:
-        return
-    damage = random.randint(1, 3 + cfg.level // 10)
-    if cfg.arrows > 0 and random.random() < 0.35:
-        damage += random.randint(1, cfg.arrows)
-        add_log("🏹 A caveman throws a stick-arrow!")
-    if st.session_state.get("ninja_hp", 0) > 0 and random.random() < 0.45:
-        st.session_state.ninja_hp = max(0, st.session_state.ninja_hp - damage)
-        add_log(f"🥷 Ninja blocks the attack but takes {damage} damage.")
+def in_bounds(pos):
+    size = st.session_state.board_size
+    return 0 <= pos[0] < size and 0 <= pos[1] < size
+
+
+def enemy_at(pos):
+    for idx, enemy in enumerate(st.session_state.enemies):
+        if enemy["pos"] == pos and enemy["hp"] > 0:
+            return idx, enemy
+    return None, None
+
+
+def rock_at(pos):
+    rock = st.session_state.rocks.get(pos)
+    if rock and rock["hp"] > 0:
+        return rock
+    return None
+
+
+def uncover_food(rock, pos):
+    if rock.get("food"):
+        st.session_state.food_found += 1
+        add_log(f"{rock['food']} Food found under the rock!")
+        rock["food"] = None
     else:
-        st.session_state.dino_hp = max(0, st.session_state.dino_hp - damage)
-        add_log(f"🦖 T-Rex takes {damage} damage.")
+        add_log("Dust cloud! No snack under that rock.")
+    st.session_state.rocks.pop(pos, None)
 
+
+def stomp_position(pos, power_bonus=0, source="🦖 T-Rex"):
+    rock = rock_at(pos)
+    if not rock:
+        return False
+    damage = random.randint(3, 6 + st.session_state.level // 10) + power_bonus
+    rock["hp"] = max(0, rock["hp"] - damage)
+    add_log(f"{source} smashes a rock for {damage} damage.")
+    if rock["hp"] <= 0:
+        uncover_food(rock, pos)
+    return True
+
+
+def attack_enemy(pos, power_bonus=0, source="🦖 T-Rex"):
+    idx, enemy = enemy_at(pos)
+    if enemy is None:
+        return False
+    damage = random.randint(5, 10 + st.session_state.level // 10) + power_bonus
+    enemy["hp"] = max(0, enemy["hp"] - damage)
+    label = "boss hunter" if enemy["type"] == "boss" else "caveman"
+    add_log(f"{source} hits the {label} for {damage} damage.")
+    if enemy["hp"] <= 0:
+        add_log(f"✅ The {label} is defeated!")
+    return True
+
+
+def move_dino(direction: str):
+    if st.session_state.screen != "play":
+        return
+    dr, dc = DIRECTIONS[direction]
+    current = st.session_state.dino_pos
+    target = (current[0] + dr, current[1] + dc)
+    if not in_bounds(target):
+        st.session_state.message = "The forest is too thick that way. Choose another direction."
+        return
+
+    st.session_state.moves_left -= 1
+    if stomp_position(target):
+        pass
+    elif attack_enemy(target):
+        pass
+    else:
+        st.session_state.dino_pos = target
+        add_log("🦖 T-Rex stomps through the forest.")
+    helper_auto_turn()
+    enemy_turn()
+    check_end()
+
+
+def roar():
+    st.session_state.moves_left -= 1
+    dino = st.session_state.dino_pos
+    scared = 0
+    for enemy in st.session_state.enemies:
+        if enemy["hp"] > 0 and enemy["type"] == "caveman" and manhattan(dino, enemy["pos"]) <= 2:
+            enemy["hp"] = max(0, enemy["hp"] - random.randint(4, 7))
+            scared += 1
+    if scared:
+        add_log(f"📣 Dino Roar scares {scared} nearby caveman/cavemen!")
+    else:
+        add_log("📣 Dino Roar echoes through the forest, but no cavemen were close.")
+    enemy_turn()
+    check_end()
+
+
+def ninja_special():
+    if st.session_state.level < NINJA_UNLOCK_LEVEL:
+        st.session_state.message = "The ninja helper unlocks at Level 6."
+        return
+    if st.session_state.ninja_hp <= 0:
+        st.session_state.message = "The ninja is knocked out for this level, but the T-Rex can still win."
+        return
+    st.session_state.moves_left -= 1
+    dino = st.session_state.dino_pos
+    targets = []
+    for pos, rock in st.session_state.rocks.items():
+        if rock["hp"] > 0 and manhattan(dino, pos) <= 2:
+            targets.append(("rock", pos))
+    for enemy in st.session_state.enemies:
+        if enemy["hp"] > 0 and manhattan(dino, enemy["pos"]) <= 2:
+            targets.append(("enemy", enemy["pos"]))
+    if not targets:
+        add_log("🥷 Ninja flips forward, but nothing is close enough to hit.")
+    else:
+        kind, pos = random.choice(targets)
+        if kind == "rock":
+            stomp_position(pos, power_bonus=3, source="🥷 Ninja")
+        else:
+            attack_enemy(pos, power_bonus=4, source="🥷 Ninja")
+    enemy_turn()
+    check_end()
+
+
+def helper_auto_turn():
+    if st.session_state.level < NINJA_UNLOCK_LEVEL or st.session_state.ninja_hp <= 0:
+        return
+    dino = st.session_state.dino_pos
+    st.session_state.ninja_pos = (dino[0], max(0, dino[1] - 1))
+    nearby_enemies = [e["pos"] for e in st.session_state.enemies if e["hp"] > 0 and manhattan(dino, e["pos"]) <= 1]
+    if nearby_enemies and random.random() < 0.5:
+        attack_enemy(random.choice(nearby_enemies), power_bonus=2, source="🥷 Ninja auto-help")
+
+
+def step_toward(start, target):
+    sr, sc = start
+    tr, tc = target
+    options = []
+    if sr < tr:
+        options.append((sr + 1, sc))
+    if sr > tr:
+        options.append((sr - 1, sc))
+    if sc < tc:
+        options.append((sr, sc + 1))
+    if sc > tc:
+        options.append((sr, sc - 1))
+    random.shuffle(options)
+    blocked = set(st.session_state.rocks.keys()) | {st.session_state.dino_pos}
+    for option in options:
+        if in_bounds(option) and option not in blocked:
+            return option
+    return start
+
+
+def enemy_turn():
+    if st.session_state.screen != "play":
+        return
+    dino = st.session_state.dino_pos
+    ninja_alive = st.session_state.level >= NINJA_UNLOCK_LEVEL and st.session_state.ninja_hp > 0
+    for enemy in st.session_state.enemies:
+        if enemy["hp"] <= 0:
+            continue
+        distance = manhattan(enemy["pos"], dino)
+        if distance <= 1:
+            damage = random.randint(2, 5 if enemy["type"] == "caveman" else 8)
+            if ninja_alive and random.random() < 0.45:
+                st.session_state.ninja_hp = max(0, st.session_state.ninja_hp - damage)
+                add_log(f"🥷 Ninja blocks an attack and takes {damage} damage.")
+                ninja_alive = st.session_state.ninja_hp > 0
+            else:
+                st.session_state.dino_hp = max(0, st.session_state.dino_hp - damage)
+                add_log(f"🏹 Caveman attack! T-Rex takes {damage} damage.")
+        elif random.random() < 0.45:
+            enemy["pos"] = step_toward(enemy["pos"], dino)
+
+    cfg = cfg_for(st.session_state.level)
     if random.random() < cfg.genie_chance:
-        hp = max(2, cfg.rock_hp - 1)
-        st.session_state.rocks.append({"name": "Genie Rock", "hp": hp, "max_hp": hp, "food": random.choice(FOODS), "icon": "🧞‍♂️🪨"})
-        st.session_state.genie_mischief += 1
-        add_log("🧞 The genie poofs a new rock into the path!")
+        spawn_genie_rock()
 
 
-def check_level_end(cfg: LevelConfig):
+def spawn_genie_rock():
+    size = st.session_state.board_size
+    occupied = {st.session_state.dino_pos, st.session_state.genie_pos}
+    occupied |= {pos for pos, r in st.session_state.rocks.items() if r["hp"] > 0}
+    occupied |= {e["pos"] for e in st.session_state.enemies if e["hp"] > 0}
+    open_cells = [pos for pos in empty_cells(size) if pos not in occupied and manhattan(pos, st.session_state.dino_pos) > 1]
+    if not open_cells:
+        return
+    pos = random.choice(open_cells)
+    hp = max(2, cfg_for(st.session_state.level).rock_hp - 1)
+    st.session_state.rocks[pos] = {"hp": hp, "max_hp": hp, "food": random.choice(FOODS) if random.random() < 0.7 else None, "kind": "🧞‍♂️🪨"}
+    st.session_state.genie_mischief += 1
+    add_log("🧞 Genie poofs a new rock into the forest!")
+
+
+def check_end():
+    cfg = cfg_for(st.session_state.level)
+    boss_alive = any(e["type"] == "boss" and e["hp"] > 0 for e in st.session_state.enemies)
     if st.session_state.dino_hp <= 0:
         st.session_state.losses += 1
         st.session_state.screen = "lost"
-        st.session_state.message = "Oh no! The T-Rex got too tired and lost the level."
+        st.session_state.message = "Oh no! The T-Rex got too tired. Try the level again."
         return
     if st.session_state.moves_left <= 0:
         st.session_state.losses += 1
         st.session_state.screen = "lost"
-        st.session_state.message = "Out of moves! Try the level again with a better strategy."
+        st.session_state.message = "Out of moves! Try again and choose the closest rocks first."
         return
-    rocks_cleared = all(r["hp"] <= 0 for r in st.session_state.rocks)
-    boss_defeated = not cfg.is_boss or st.session_state.boss_hp <= 0
-    food_ready = st.session_state.food_found >= cfg.food_goal
-    cavemen_clear = st.session_state.cavemen_left <= 0 or not cfg.is_boss
-    if food_ready and boss_defeated and (rocks_cleared or cfg.is_boss) and cavemen_clear:
+    if st.session_state.food_found >= cfg.food_goal and (not cfg.is_boss or not boss_alive):
         st.session_state.wins += 1
-        st.session_state.xp += 10 + cfg.level
+        st.session_state.xp += 10 + st.session_state.level
         st.session_state.screen = "won"
-        st.session_state.message = f"Level {cfg.level} cleared! The T-Rex found enough food and is less hangry."
+        st.session_state.message = "Level cleared! The T-Rex found enough food and calmed down."
 
 
-def stomp_rock(index: int):
-    cfg = level_config(st.session_state.level)
-    if index >= len(st.session_state.rocks):
-        return
-    rock = st.session_state.rocks[index]
-    if rock["hp"] <= 0:
-        st.session_state.message = "That rock is already broken. Pick another one!"
-        return
-    hit = random.randint(2, 5 + st.session_state.level // 12)
-    rock["hp"] = max(0, rock["hp"] - hit)
-    st.session_state.moves_left -= 1
-    add_log(f"🦖 T-Rex stomps {rock['name']} for {hit} damage.")
-    if rock["hp"] == 0:
-        if rock.get("food"):
-            st.session_state.food_found += 1
-            add_log(f"{rock['food']} Food found under {rock['name']}!")
-        else:
-            add_log("Dust everywhere, but no snack under this one.")
-    apply_enemy_turn(cfg)
-    check_level_end(cfg)
+def start_mini_game():
+    pieces = CRYSTAL_PIECES[:]
+    random.shuffle(pieces)
+    st.session_state.mini_sequence = pieces
+    st.session_state.mini_progress = []
+    st.session_state.mini_started = time.time()
+    st.session_state.mini_seconds = max(14, 30 - st.session_state.level // 3)
+    st.session_state.screen = "mini"
+    st.session_state.message = "Crystal Puzzle: click the pieces in the correct order before time runs out!"
 
 
-def ninja_strike():
-    cfg = level_config(st.session_state.level)
-    if st.session_state.level < NINJA_UNLOCK_LEVEL:
-        st.session_state.message = "The ninja unlocks at Level 6."
-        return
-    if st.session_state.ninja_hp <= 0:
-        st.session_state.message = "The ninja is knocked out for this level."
-        return
-    active_rocks = [i for i, r in enumerate(st.session_state.rocks) if r["hp"] > 0]
-    if not active_rocks:
-        st.session_state.message = "No rocks left for the ninja to strike."
-        return
-    idx = random.choice(active_rocks)
-    rock = st.session_state.rocks[idx]
-    hit = random.randint(3, 6 + st.session_state.level // 10)
-    rock["hp"] = max(0, rock["hp"] - hit)
-    st.session_state.moves_left -= 1
-    add_log(f"🥷 Ninja slices {rock['name']} for {hit} damage.")
-    if rock["hp"] == 0 and rock.get("food"):
-        st.session_state.food_found += 1
-        add_log(f"{rock['food']} Ninja uncovered food!")
-    apply_enemy_turn(cfg)
-    check_level_end(cfg)
-
-
-def roar_scare():
-    cfg = level_config(st.session_state.level)
-    st.session_state.moves_left -= 1
-    scared = random.randint(0, 2 + st.session_state.level // 15)
-    if scared > 0:
-        st.session_state.cavemen_left = max(0, st.session_state.cavemen_left - scared)
-        add_log(f"📣 T-Rex roars and scares away {scared} caveman/cavemen!")
+def mini_click(piece):
+    expected = st.session_state.mini_sequence[len(st.session_state.mini_progress)]
+    if piece == expected:
+        st.session_state.mini_progress.append(piece)
+        if len(st.session_state.mini_progress) == len(st.session_state.mini_sequence):
+            st.session_state.xp += 5
+            next_level()
     else:
-        add_log("📣 T-Rex roars, but the cavemen hold steady.")
-    apply_enemy_turn(cfg)
-    check_level_end(cfg)
+        st.session_state.mini_progress = []
+        st.session_state.message = "Oops! Wrong crystal piece. Try the sequence again."
 
 
-def boss_attack():
-    cfg = level_config(st.session_state.level)
-    if not cfg.is_boss:
-        return
-    damage = random.randint(5, 9 + st.session_state.level // 10)
-    st.session_state.boss_hp = max(0, st.session_state.boss_hp - damage)
-    st.session_state.moves_left -= 1
-    add_log(f"⚔️ Team attack hits the mighty hunter for {damage} damage!")
-    if random.random() < 0.4:
-        st.session_state.cavemen_left = max(0, st.session_state.cavemen_left - 1)
-        add_log("A mob helper runs away from the battle!")
-    apply_enemy_turn(cfg)
-    check_level_end(cfg)
+def next_level():
+    if st.session_state.level >= MAX_LEVEL:
+        st.session_state.screen = "finished"
+        st.session_state.message = "You beat all 50 starter levels!"
+    else:
+        st.session_state.level += 1
+        start_level(st.session_state.level)
 
 
-def render_css():
+def cell_html(r, c):
+    pos = (r, c)
+    contents = []
+    title = "Forest"
+    if pos == st.session_state.genie_pos:
+        contents.append("🧞")
+        title = "Genie cave"
+    rock = rock_at(pos)
+    if rock:
+        contents.append(rock["kind"])
+        title = f"Rock HP {rock['hp']}/{rock['max_hp']}"
+    for enemy in st.session_state.enemies:
+        if enemy["pos"] == pos and enemy["hp"] > 0:
+            if enemy["type"] == "boss":
+                contents.append("👑🧔")
+                title = f"Boss HP {enemy['hp']}/{enemy['max_hp']}"
+            else:
+                contents.append("🧔")
+                title = f"Caveman HP {enemy['hp']}/{enemy['max_hp']}"
+    if st.session_state.ninja_pos == pos and st.session_state.ninja_hp > 0:
+        contents.append("🥷")
+        title = "Ninja helper"
+    if st.session_state.dino_pos == pos:
+        contents.append("🦖")
+        title = "T-Rex"
+    if not contents:
+        contents.append(random.choice(["🌲", "🌳", "🌿", "🍃"]))
+    label = " ".join(contents)
+    return f"""
+    <div class='forest-cell' title='{title}'>
+        <div class='cell-emoji'>{label}</div>
+        <div class='cell-coord'>{title}</div>
+    </div>
+    """
+
+
+def render_board():
+    size = st.session_state.board_size
+    grid = "<div class='forest-grid' style='grid-template-columns: repeat(%s, 1fr);'>" % size
+    for r in range(size):
+        for c in range(size):
+            grid += cell_html(r, c)
+    grid += "</div>"
+    st.markdown(grid, unsafe_allow_html=True)
+
+
+def render_stats():
+    cfg = cfg_for(st.session_state.level)
+    enemies_alive = sum(1 for e in st.session_state.enemies if e["hp"] > 0)
+    boss = next((e for e in st.session_state.enemies if e["type"] == "boss"), None)
     st.markdown(
-        """
-        <style>
-        .stApp { background: linear-gradient(135deg, #101820 0%, #1b4332 50%, #081c15 100%); color: #f7fff7; }
-        section[data-testid="stSidebar"] { background: #081c15; }
-        .game-card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); border-radius: 18px; padding: 18px; margin: 8px 0; box-shadow: 0 8px 24px rgba(0,0,0,0.22); }
-        .hero-title { font-size: 48px; font-weight: 900; line-height: 1.05; }
-        .big-emoji { font-size: 78px; text-align:center; }
-        .stat-pill { display:inline-block; padding:8px 12px; border-radius:999px; background:rgba(255,255,255,.13); margin:4px; border:1px solid rgba(255,255,255,.18); }
-        .small-note { opacity:.85; font-size:14px; }
-        </style>
+        f"""
+        <div class='hud'>
+          <span>🦖 Dino HP: {st.session_state.dino_hp}/{st.session_state.dino_max_hp}</span>
+          <span>🍖 Food: {st.session_state.food_found}/{cfg.food_goal}</span>
+          <span>👣 Moves: {st.session_state.moves_left}</span>
+          <span>🧔 Enemies: {enemies_alive}</span>
+          <span>🧞 Genie rocks: {st.session_state.genie_mischief}</span>
+          <span>🥷 Ninja: {'Locked' if st.session_state.level < NINJA_UNLOCK_LEVEL else str(st.session_state.ninja_hp) + '/' + str(st.session_state.ninja_max_hp)}</span>
+        </div>
         """,
         unsafe_allow_html=True,
     )
+    st.progress(clamp(st.session_state.dino_hp / max(1, st.session_state.dino_max_hp)), text="Dino energy")
+    if st.session_state.level >= NINJA_UNLOCK_LEVEL:
+        st.progress(clamp(st.session_state.ninja_hp / max(1, st.session_state.ninja_max_hp)), text="Ninja energy")
+    if boss:
+        st.progress(clamp(boss["hp"] / max(1, boss["max_hp"])), text="Boss health")
 
 
-def render_sidebar():
-    st.sidebar.title("🦖 Dino Controls")
-    st.sidebar.write(f"**Level:** {st.session_state.level}/{MAX_LEVEL}")
-    st.sidebar.write(f"**Wins:** {st.session_state.wins}  |  **Tries lost:** {st.session_state.losses}")
-    st.sidebar.write(f"**XP:** {st.session_state.xp}")
-    st.sidebar.progress(st.session_state.level / MAX_LEVEL)
+def render_controls():
+    st.subheader("🎮 Controls")
+    st.caption("Use the buttons like a controller. Move into a rock to smash it. Move into a caveman or boss to attack. Keyboard arrows are not required in Streamlit.")
+    top = st.columns([1, 1, 1])
+    with top[1]:
+        if st.button("⬆️ Up", use_container_width=True):
+            move_dino("up")
+            st.rerun()
+    mid = st.columns([1, 1, 1])
+    with mid[0]:
+        if st.button("⬅️ Left", use_container_width=True):
+            move_dino("left")
+            st.rerun()
+    with mid[1]:
+        if st.button("📣 Dino Roar", use_container_width=True):
+            roar()
+            st.rerun()
+    with mid[2]:
+        if st.button("➡️ Right", use_container_width=True):
+            move_dino("right")
+            st.rerun()
+    bottom = st.columns([1, 1, 1])
+    with bottom[1]:
+        if st.button("⬇️ Down", use_container_width=True):
+            move_dino("down")
+            st.rerun()
+    if st.session_state.level >= NINJA_UNLOCK_LEVEL:
+        if st.button("🥷 Ninja Special", use_container_width=True, disabled=st.session_state.ninja_hp <= 0):
+            ninja_special()
+            st.rerun()
+
+
+def render_log():
+    st.subheader("Adventure Log")
+    for item in st.session_state.log:
+        st.markdown(f"<div class='log-item'>{item}</div>", unsafe_allow_html=True)
+
+
+def render_play():
+    st.markdown(f"## Level {st.session_state.level}: Forest Rock Smash")
+    st.info(st.session_state.message)
+    render_stats()
+    left, right = st.columns([2.2, 1])
+    with left:
+        render_board()
+    with right:
+        render_controls()
+        render_log()
+
+
+def render_intro():
+    st.markdown("# 🦖 Dino Hangry Rocks")
+    st.markdown(
+        """
+        <div class='story-card'>
+        A hungry T-Rex is stomping through the forest looking for food. The problem: a mischievous genie keeps hiding snacks under rocks and helping the cavemen block the way.
+        <br><br>
+        Your mission is to move the T-Rex around the forest, smash rocks, find enough food, avoid getting knocked out, and beat boss hunters every 10 levels.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("### How to play")
+    st.markdown(
+        """
+        - Use the **on-screen arrow buttons** with a mouse, trackpad, or touchscreen.
+        - Move into a **rock** to smash it.
+        - Move into a **caveman** or **boss** to attack.
+        - Use **Dino Roar** to scare nearby cavemen.
+        - At **Level 6**, the **ninja helper** unlocks.
+        - After each level, complete a quick **timed crystal puzzle**.
+        """
+    )
+    if st.button("▶️ Start Adventure", use_container_width=True):
+        start_level(st.session_state.level)
+        st.rerun()
+
+
+def render_won():
+    st.success(st.session_state.message)
+    st.balloons()
+    st.markdown("### 💎 Bonus Crystal Puzzle")
+    st.write("Before the next level, help the T-Rex put the crystal back together.")
+    if st.button("Start Crystal Puzzle", use_container_width=True):
+        start_mini_game()
+        st.rerun()
+    if st.button("Skip puzzle and go to next level", use_container_width=True):
+        next_level()
+        st.rerun()
+
+
+def render_lost():
+    st.error(st.session_state.message)
+    st.write("Try again. Hint: chase the closest rocks first, and use Dino Roar when cavemen get close.")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Retry Current Level", use_container_width=True):
+            start_level(st.session_state.level)
+            st.rerun()
+    with c2:
+        if st.button("New Game", use_container_width=True):
+            reset_game()
+            st.rerun()
+
+
+def render_mini():
+    elapsed = int(time.time() - st.session_state.mini_started)
+    left = max(0, st.session_state.mini_seconds - elapsed)
+    st.markdown("# 💎 Crystal Puzzle")
+    st.write("Click the crystal pieces in the exact order shown. If you click the wrong piece, the puzzle resets.")
+    st.progress(clamp(left / max(1, st.session_state.mini_seconds)), text=f"Time left: {left} seconds")
+    if left <= 0:
+        st.warning("Time ran out, but this is kid-friendly. You can retry or continue.")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Retry Puzzle", use_container_width=True):
+                start_mini_game()
+                st.rerun()
+        with c2:
+            if st.button("Continue to Next Level", use_container_width=True):
+                next_level()
+                st.rerun()
+        return
+    st.markdown("### Target order")
+    st.markdown(" ".join(st.session_state.mini_sequence))
+    st.markdown("### Your progress")
+    st.markdown(" ".join(st.session_state.mini_progress) if st.session_state.mini_progress else "_No pieces placed yet._")
+    shuffled = st.session_state.mini_sequence[:]
+    random.seed(st.session_state.level + len(st.session_state.mini_progress))
+    random.shuffle(shuffled)
+    cols = st.columns(len(shuffled))
+    for col, piece in zip(cols, shuffled):
+        with col:
+            if st.button(piece, key=f"mini_{piece}_{len(st.session_state.mini_progress)}", use_container_width=True):
+                mini_click(piece)
+                st.rerun()
+
+
+def render_finished():
+    st.success("🎉 You finished all 50 starter levels!")
+    st.write("You can keep improving the game by adding character upgrades, sound effects, more maps, and new bosses.")
+    if st.button("Start Over", use_container_width=True):
+        reset_game()
+        st.rerun()
+
+
+def sidebar():
+    st.sidebar.markdown("# 🦖 Dino Controls")
+    st.sidebar.write(f"Level: {st.session_state.level}/{MAX_LEVEL}")
+    st.sidebar.write(f"Wins: {st.session_state.wins} | Losses: {st.session_state.losses}")
+    st.sidebar.write(f"XP: {st.session_state.xp}")
+    st.sidebar.progress(clamp(st.session_state.level / MAX_LEVEL))
     if st.sidebar.button("Start / Restart Current Level", use_container_width=True):
         start_level(st.session_state.level)
         st.rerun()
     if st.sidebar.button("New Game", use_container_width=True):
         reset_game()
         st.rerun()
-    with st.sidebar.expander("How to play"):
-        st.write("Break rocks to find food. Food calms the T-Rex's hangry meter.")
-        st.write("The ninja unlocks at Level 6 and can help break rocks.")
-        st.write("Every 10th level is a boss fight against mighty cavemen hunters.")
-        st.write("Between levels, solve the crystal puzzle by clicking the pieces in the shown order.")
+    with st.sidebar.expander("How to play", expanded=False):
+        st.write("Move with the arrow buttons. If the T-Rex bumps into a rock, he smashes it. If he bumps into a caveman or boss, he attacks. Find enough food to finish the level.")
 
 
-def render_how_to_play_card():
+def css():
     st.markdown(
         """
-        <div class="game-card">
-        <h3>🎮 How to Play</h3>
-        <b>Controls:</b> Use your <b>mouse, trackpad, or touchscreen</b>. Click the game buttons to choose actions.
-        Keyboard arrow keys are not needed in this Streamlit version.<br><br>
-        <b>Main goal:</b> Break rocks to find enough food before the T-Rex runs out of HP or moves.<br>
-        <b>Stomp this rock:</b> T-Rex attacks one rock.<br>
-        <b>Dino Roar:</b> Scares away cavemen. Use this when cavemen are building up.<br>
-        <b>Ninja Strike:</b> Unlocks at Level 6 and helps break rocks. The ninja can be knocked out, but the T-Rex must survive.<br>
-        <b>Boss Levels:</b> Every 10th level, use rock stomps, roar, ninja strike, and boss attacks to defeat the mighty hunter.<br>
-        <b>Crystal Puzzle:</b> Between levels, click the crystal pieces in the exact order shown before time runs out.
-        </div>
+        <style>
+        .stApp {
+            background: radial-gradient(circle at top, #1f6b45 0%, #0d3d2c 45%, #06251b 100%);
+            color: white;
+        }
+        section[data-testid="stSidebar"] {
+            background: #062217;
+        }
+        .story-card, .log-item {
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 10px;
+        }
+        .hud {
+            display:flex;
+            flex-wrap:wrap;
+            gap:10px;
+            margin: 12px 0 18px 0;
+        }
+        .hud span {
+            background: rgba(255,255,255,0.14);
+            border: 1px solid rgba(255,255,255,0.20);
+            padding: 10px 14px;
+            border-radius: 999px;
+            font-weight: 700;
+        }
+        .forest-grid {
+            display:grid;
+            gap:8px;
+            padding: 14px;
+            background: linear-gradient(135deg, rgba(10,64,37,0.9), rgba(7,42,31,0.9));
+            border-radius: 20px;
+            border: 2px solid rgba(255,255,255,0.18);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        }
+        .forest-cell {
+            min-height: 82px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(46,120,75,0.95), rgba(21,80,50,0.95));
+            border: 1px solid rgba(255,255,255,0.18);
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            text-align:center;
+            box-shadow: inset 0 0 18px rgba(255,255,255,0.04);
+        }
+        .forest-cell:hover {
+            transform: translateY(-2px);
+            outline: 2px solid rgba(255,255,255,0.25);
+        }
+        .cell-emoji {
+            font-size: 32px;
+            line-height: 1.1;
+            min-height: 38px;
+        }
+        .cell-coord {
+            font-size: 10px;
+            opacity: 0.72;
+            margin-top: 4px;
+        }
+        div.stButton > button {
+            border-radius: 14px;
+            min-height: 46px;
+            font-weight: 800;
+        }
+        </style>
         """,
         unsafe_allow_html=True,
     )
 
 
-def render_intro():
-    st.markdown('<div class="hero-title">Dino Hangry Rocks</div>', unsafe_allow_html=True)
-    render_how_to_play_card()
-    st.markdown('<div class="game-card">A T-Rex is hangry! Cavemen and a sneaky genie keep hiding food under stronger and stronger rocks. Stomp rocks, find snacks, unlock the ninja helper, and beat boss hunters every 10 levels.</div>', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
-    c1.markdown('<div class="game-card big-emoji">🦖<br><span class="small-note">T-Rex Hero</span></div>', unsafe_allow_html=True)
-    c2.markdown('<div class="game-card big-emoji">🥷<br><span class="small-note">Ninja Helper at Level 6</span></div>', unsafe_allow_html=True)
-    c3.markdown('<div class="game-card big-emoji">🧞‍♂️<br><span class="small-note">Mischief Genie</span></div>', unsafe_allow_html=True)
-    if st.button("Start Level 1", type="primary", use_container_width=True):
-        start_level(1)
-        st.rerun()
-
-
-def render_status(cfg: LevelConfig):
-    st.markdown(f"### {st.session_state.message}")
-    st.markdown(
-        f"<span class='stat-pill'>🦖 Dino HP: {st.session_state.dino_hp}/{cfg.dino_max_hp}</span>"
-        f"<span class='stat-pill'>🍖 Food: {st.session_state.food_found}/{cfg.food_goal}</span>"
-        f"<span class='stat-pill'>👣 Moves: {st.session_state.moves_left}</span>"
-        f"<span class='stat-pill'>🧔 Cavemen: {st.session_state.cavemen_left}</span>"
-        f"<span class='stat-pill'>🧞 Genie tricks: {st.session_state.genie_mischief}</span>",
-        unsafe_allow_html=True,
-    )
-    if st.session_state.level >= NINJA_UNLOCK_LEVEL:
-        st.markdown(f"<span class='stat-pill'>🥷 Ninja HP: {st.session_state.ninja_hp}/{cfg.ninja_max_hp}</span>", unsafe_allow_html=True)
-    if cfg.is_boss:
-        st.markdown(f"<span class='stat-pill'>👑 Boss HP: {st.session_state.boss_hp}/{cfg.boss_hp}</span>", unsafe_allow_html=True)
-        st.progress(clamp_progress(0 if cfg.boss_hp == 0 else st.session_state.boss_hp / cfg.boss_hp))
-
-
-def render_battle():
-    cfg = level_config(st.session_state.level)
-    with st.expander("🎮 How to play this level", expanded=True):
-        st.write("Use your mouse, trackpad, or touchscreen. Click **Stomp this rock** to break rocks and find food. Click **Dino Roar** to scare cavemen. From Level 6 on, click **Ninja Strike** for extra help. On boss levels, also use **Attack Boss**.")
-    render_status(cfg)
-    left, right = st.columns([2, 1])
-    with left:
-        st.markdown("#### Rocks hiding food")
-        cols = st.columns(3)
-        for i, rock in enumerate(st.session_state.rocks):
-            with cols[i % 3]:
-                hp_ratio = 0 if rock["max_hp"] == 0 else rock["hp"] / rock["max_hp"]
-                st.markdown(f"<div class='game-card'><div style='font-size:42px;text-align:center'>{rock['icon']}</div><b>{rock['name']}</b><br>HP: {rock['hp']}/{rock['max_hp']}</div>", unsafe_allow_html=True)
-                st.progress(clamp_progress(hp_ratio))
-                disabled = rock["hp"] <= 0
-                if st.button("Stomp this rock", key=f"rock_{i}", disabled=disabled, use_container_width=True):
-                    stomp_rock(i)
-                    st.rerun()
-    with right:
-        st.markdown("#### Team Actions")
-        if st.button("🥷 Ninja Strike", disabled=st.session_state.level < NINJA_UNLOCK_LEVEL or st.session_state.get("ninja_hp", 0) <= 0, use_container_width=True):
-            ninja_strike()
-            st.rerun()
-        if st.button("📣 Dino Roar", use_container_width=True):
-            roar_scare()
-            st.rerun()
-        if cfg.is_boss and st.button("⚔️ Attack Boss", type="primary", use_container_width=True):
-            boss_attack()
-            st.rerun()
-        st.markdown("#### Adventure Log")
-        for item in st.session_state.log:
-            st.write(item)
-
-
-def render_won():
-    st.success(st.session_state.message)
-    st.balloons()
-    st.markdown("### Next: Crystal mini-game")
-    st.write("Before the next level, put the crystal back together in the correct order.")
-    if st.button("Start Crystal Puzzle", type="primary", use_container_width=True):
-        start_mini_game()
-        st.rerun()
-
-
-def render_lost():
-    st.error(st.session_state.message)
-    st.write("Tip: Find food first, use roar when cavemen build up, and save the ninja for tough rocks or boss levels.")
-    if st.button("Try Level Again", type="primary", use_container_width=True):
-        start_level(st.session_state.level)
-        st.rerun()
-
-
-def render_mini():
-    sequence = st.session_state.mini_sequence
-    elapsed = int(time.time() - st.session_state.mini_started_at) if st.session_state.mini_started_at else 0
-    remaining = max(0, st.session_state.mini_seconds - elapsed)
-    st.markdown("## 💎 Crystal Puzzle")
-    with st.expander("🎮 Crystal puzzle controls", expanded=True):
-        st.write("Use your mouse, trackpad, or touchscreen. Look at the order shown below, then click the crystal buttons in that same order before time runs out.")
-    st.write("Click the crystal pieces in this exact order before time runs out:")
-    st.markdown("### " + "  ".join(sequence))
-    st.progress(clamp_progress(remaining / st.session_state.mini_seconds))
-    st.write(f"Time left: **{remaining} seconds**")
-    if remaining <= 0:
-        st.warning("Time ran out! You can still continue, but the next level starts with fewer bonus moves.")
-    st.write("Your crystal so far: " + " ".join(st.session_state.mini_progress))
-    cols = st.columns(6)
-    shuffled = sequence[:]
-    random.seed(st.session_state.level)
-    random.shuffle(shuffled)
-    for i, piece in enumerate(shuffled):
-        with cols[i % 6]:
-            if st.button(piece, key=f"piece_{i}_{piece}", use_container_width=True):
-                target_index = len(st.session_state.mini_progress)
-                if target_index < len(sequence) and piece == sequence[target_index]:
-                    st.session_state.mini_progress.append(piece)
-                    st.session_state.message = "Correct crystal piece!"
-                    if len(st.session_state.mini_progress) == len(sequence):
-                        st.session_state.xp += 5
-                        next_level = st.session_state.level + 1
-                        if next_level > MAX_LEVEL:
-                            st.session_state.screen = "complete"
-                        else:
-                            st.session_state.level = next_level
-                            start_level(next_level)
-                    st.rerun()
-                else:
-                    st.session_state.mini_progress = []
-                    st.session_state.message = "Oops! Wrong piece. The crystal resets. Try again!"
-                    st.rerun()
-    st.info(st.session_state.message)
-    if st.button("Skip puzzle and continue", use_container_width=True):
-        next_level = st.session_state.level + 1
-        if next_level > MAX_LEVEL:
-            st.session_state.screen = "complete"
-        else:
-            st.session_state.level = next_level
-            start_level(next_level)
-        st.rerun()
-
-
-def render_complete():
-    st.balloons()
-    st.markdown("# 🏆 You beat all 50 starter levels!")
-    st.write("The T-Rex is full, the ninja is proud, and the genie needs a nap.")
-    if st.button("Play Again", type="primary"):
-        reset_game()
-        st.rerun()
-
-
-def render_level_map():
-    st.markdown("### Level Roadmap")
-    rows = []
-    for lvl in range(1, MAX_LEVEL + 1):
-        if lvl % 10 == 0:
-            label = "👑 Boss"
-        elif lvl == NINJA_UNLOCK_LEVEL:
-            label = "🥷 Ninja Unlock"
-        elif lvl < 10:
-            label = "🪨 Easy Rocks"
-        elif lvl < 25:
-            label = "⛰️ Tougher Rocks"
-        elif lvl < 40:
-            label = "🧞 More Genie Tricks"
-        else:
-            label = "🔥 Final Challenge"
-        rows.append({"Level": lvl, "Type": label})
-    st.dataframe(rows, use_container_width=True, hide_index=True)
-
-
 def main():
     init_state()
-    render_css()
-    render_sidebar()
-    tab1, tab2 = st.tabs(["Game", "50-Level Plan"])
-    with tab1:
-        screen = st.session_state.screen
-        if screen == "intro":
-            render_intro()
-        elif screen == "battle":
-            render_battle()
-        elif screen == "won":
-            render_won()
-        elif screen == "lost":
-            render_lost()
-        elif screen == "mini":
-            render_mini()
-        elif screen == "complete":
-            render_complete()
-    with tab2:
-        render_level_map()
-        st.markdown("#### Future upgrades")
-        st.write("Add moving sprites, sound effects, collectible dinosaur skins, stronger crystal puzzles, and custom level art later.")
+    css()
+    sidebar()
+    screen = st.session_state.screen
+    if screen == "intro":
+        render_intro()
+    elif screen == "play":
+        render_play()
+    elif screen == "won":
+        render_won()
+    elif screen == "lost":
+        render_lost()
+    elif screen == "mini":
+        render_mini()
+    elif screen == "finished":
+        render_finished()
 
 
 if __name__ == "__main__":
