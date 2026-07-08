@@ -75,15 +75,24 @@ def add_log(text: str):
     st.session_state.log = st.session_state.log[:6]
 
 
+def clamp_progress(value: float) -> float:
+    """Streamlit progress bars must stay between 0.0 and 1.0."""
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def start_level(level: int):
     cfg = level_config(level)
     rocks = []
     for i in range(cfg.rock_count):
         hidden_food = random.random() < 0.58
+        hp = cfg.rock_hp + random.randint(0, max(1, cfg.level // 12))
         rocks.append({
             "name": f"Rock {i + 1}",
-            "hp": cfg.rock_hp + random.randint(0, max(1, cfg.level // 12)),
-            "max_hp": cfg.rock_hp + random.randint(0, max(1, cfg.level // 12)),
+            "hp": hp,
+            "max_hp": hp,
             "food": random.choice(FOODS) if hidden_food else None,
             "icon": random.choice(ROCK_ICONS),
         })
@@ -274,8 +283,28 @@ def render_sidebar():
         st.write("Between levels, solve the crystal puzzle by clicking the pieces in the shown order.")
 
 
+def render_how_to_play_card():
+    st.markdown(
+        """
+        <div class="game-card">
+        <h3>🎮 How to Play</h3>
+        <b>Controls:</b> Use your <b>mouse, trackpad, or touchscreen</b>. Click the game buttons to choose actions.
+        Keyboard arrow keys are not needed in this Streamlit version.<br><br>
+        <b>Main goal:</b> Break rocks to find enough food before the T-Rex runs out of HP or moves.<br>
+        <b>Stomp this rock:</b> T-Rex attacks one rock.<br>
+        <b>Dino Roar:</b> Scares away cavemen. Use this when cavemen are building up.<br>
+        <b>Ninja Strike:</b> Unlocks at Level 6 and helps break rocks. The ninja can be knocked out, but the T-Rex must survive.<br>
+        <b>Boss Levels:</b> Every 10th level, use rock stomps, roar, ninja strike, and boss attacks to defeat the mighty hunter.<br>
+        <b>Crystal Puzzle:</b> Between levels, click the crystal pieces in the exact order shown before time runs out.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_intro():
     st.markdown('<div class="hero-title">Dino Hangry Rocks</div>', unsafe_allow_html=True)
+    render_how_to_play_card()
     st.markdown('<div class="game-card">A T-Rex is hangry! Cavemen and a sneaky genie keep hiding food under stronger and stronger rocks. Stomp rocks, find snacks, unlock the ninja helper, and beat boss hunters every 10 levels.</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     c1.markdown('<div class="game-card big-emoji">🦖<br><span class="small-note">T-Rex Hero</span></div>', unsafe_allow_html=True)
@@ -300,11 +329,13 @@ def render_status(cfg: LevelConfig):
         st.markdown(f"<span class='stat-pill'>🥷 Ninja HP: {st.session_state.ninja_hp}/{cfg.ninja_max_hp}</span>", unsafe_allow_html=True)
     if cfg.is_boss:
         st.markdown(f"<span class='stat-pill'>👑 Boss HP: {st.session_state.boss_hp}/{cfg.boss_hp}</span>", unsafe_allow_html=True)
-        st.progress(0 if cfg.boss_hp == 0 else st.session_state.boss_hp / cfg.boss_hp)
+        st.progress(clamp_progress(0 if cfg.boss_hp == 0 else st.session_state.boss_hp / cfg.boss_hp))
 
 
 def render_battle():
     cfg = level_config(st.session_state.level)
+    with st.expander("🎮 How to play this level", expanded=True):
+        st.write("Use your mouse, trackpad, or touchscreen. Click **Stomp this rock** to break rocks and find food. Click **Dino Roar** to scare cavemen. From Level 6 on, click **Ninja Strike** for extra help. On boss levels, also use **Attack Boss**.")
     render_status(cfg)
     left, right = st.columns([2, 1])
     with left:
@@ -314,7 +345,7 @@ def render_battle():
             with cols[i % 3]:
                 hp_ratio = 0 if rock["max_hp"] == 0 else rock["hp"] / rock["max_hp"]
                 st.markdown(f"<div class='game-card'><div style='font-size:42px;text-align:center'>{rock['icon']}</div><b>{rock['name']}</b><br>HP: {rock['hp']}/{rock['max_hp']}</div>", unsafe_allow_html=True)
-                st.progress(hp_ratio)
+                st.progress(clamp_progress(hp_ratio))
                 disabled = rock["hp"] <= 0
                 if st.button("Stomp this rock", key=f"rock_{i}", disabled=disabled, use_container_width=True):
                     stomp_rock(i)
@@ -358,9 +389,11 @@ def render_mini():
     elapsed = int(time.time() - st.session_state.mini_started_at) if st.session_state.mini_started_at else 0
     remaining = max(0, st.session_state.mini_seconds - elapsed)
     st.markdown("## 💎 Crystal Puzzle")
+    with st.expander("🎮 Crystal puzzle controls", expanded=True):
+        st.write("Use your mouse, trackpad, or touchscreen. Look at the order shown below, then click the crystal buttons in that same order before time runs out.")
     st.write("Click the crystal pieces in this exact order before time runs out:")
     st.markdown("### " + "  ".join(sequence))
-    st.progress(remaining / st.session_state.mini_seconds)
+    st.progress(clamp_progress(remaining / st.session_state.mini_seconds))
     st.write(f"Time left: **{remaining} seconds**")
     if remaining <= 0:
         st.warning("Time ran out! You can still continue, but the next level starts with fewer bonus moves.")
