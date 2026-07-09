@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dino Hangry Rocks - Phaser Edition</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #0f2f1f;
+      color: #fff8d8;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 100%;
+      overflow: hidden;
+    }
+    #game-wrap {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(circle at 50% 20%, rgba(49, 132, 77, 0.45), transparent 40%),
+        linear-gradient(180deg, #123f29 0%, #082315 100%);
+    }
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      box-shadow: 0 0 0 6px #18351f, 0 0 30px rgba(0,0,0,.45);
+      border-radius: 8px;
+    }
+    .fallback {
+      max-width: 720px;
+      padding: 24px;
+      line-height: 1.5;
+    }
+    a { color: #ffe26a; }
+  </style>
+</head>
+<body>
+  <div id="game-wrap"></div>
+
+  <!-- Phaser link: this loads Phaser from a CDN. No install needed for GitHub Pages. -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
