@@ -1,78 +1,47 @@
-# Dino Hangry Rocks — Phaser Edition
+# Dino Hangry Rocks — Phaser 2.5D Forest Adventure
 
-This is the 8-bit Nintendo-style version of the dinosaur rock-smashing game.
+This is the 2.5D Phaser version of the Dino Hangry Rocks game.
 
-It is no longer a Streamlit app. It is now a real browser game using **Phaser**, an HTML5 game framework.
+It is meant to feel less like a board game and more like an immersive kid-friendly forest adventure. The camera follows the T-Rex through a large jungle path. Rocks, trees, enemies, shadows, particles, and sound-style feedback are all handled inside Phaser.
 
-## What changed
+## How to play
 
-- The T-Rex walks around a forest map.
-- The player uses arrow keys or WASD.
-- The T-Rex smashes rocks by walking into them or pressing Space/Enter next to them.
-- Food is hidden under rocks.
-- Cavemen chase and attack the dinosaur.
-- A genie creates extra rocks.
-- The ninja helper unlocks at Level 6.
-- Every 10th level is a boss level.
-- Between levels, there is a timed crystal puzzle mini-game.
-- The first version includes 50 levels.
+- Move: **Arrow keys** or **WASD**
+- Stomp / attack: **Space** or **Enter**
+- Roar: **R**
+- Touchscreen buttons also appear on screen
+- Smash rocks to find food
+- Avoid cavemen arrows and attacks
+- The genie can spawn extra rocks
+- Ninja helper unlocks at Level 6
+- Boss levels happen every 10 levels
+- The dinosaur must not run out of HP
 
-## Controls
+## Files
 
-Keyboard:
-
-- Arrow keys or WASD: move the T-Rex
-- Space or Enter: stomp/attack next to the T-Rex
-
-Touchscreen or mouse:
-
-- Use the on-screen controller buttons in the lower-right corner of the game.
+- `index.html` — webpage that loads Phaser and the game
+- `game.js` — the full game code
+- `README.md` — instructions
 
 ## How Phaser is linked
 
-Phaser is loaded in `index.html` with this script tag:
+The project links to Phaser inside `index.html`:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
-```
-
-Then the game code is loaded after Phaser:
-
-```html
 <script src="game.js"></script>
 ```
 
-That order matters. Phaser must load before `game.js`.
+The order matters:
 
-## How to put this on GitHub Pages
-
-1. Create a new GitHub repository, or reuse the existing game repository.
-2. Upload these files to the root of the repo:
-   - `index.html`
-   - `game.js`
-   - `README.md`
-3. Commit the files.
-4. Go to the repo on GitHub.
-5. Click **Settings**.
-6. Click **Pages** in the left menu.
-7. Under **Build and deployment**, choose:
-   - Source: **Deploy from a branch**
-   - Branch: **main**
-   - Folder: **/root**
-8. Click **Save**.
-9. Wait a minute or two. GitHub will give you a public game link.
-
-The link usually looks like:
-
-```text
-https://YOUR-GITHUB-NAME.github.io/YOUR-REPO-NAME/
-```
+1. Phaser loads first.
+2. Your game code loads second.
 
 ## How to test locally
 
-Because Phaser games run in the browser, it is best to use a local web server instead of just double-clicking `index.html`.
+Because Phaser games are web games, they work best from a local web server.
 
-Easy Python option:
+If you have Python installed, open a terminal in this folder and run:
 
 ```bash
 python -m http.server 8000
@@ -84,14 +53,37 @@ Then open:
 http://localhost:8000
 ```
 
-## Optional later upgrades
+You can also upload the files directly to GitHub and use GitHub Pages.
 
-Good next steps:
+## How to publish with GitHub Pages
 
-- Add custom pixel art sprites instead of simple generated pixel sprites.
-- Add walking animations.
-- Add sound effects and music.
-- Add a larger scrolling world.
-- Add save slots with `localStorage`.
-- Add more puzzle-room types.
-- Add story dialogue for the ninja, genie, and cavemen boss.
+1. Upload these files to your GitHub repository:
+   - `index.html`
+   - `game.js`
+   - `README.md`
+2. Open the repo on GitHub.
+3. Go to **Settings**.
+4. Go to **Pages**.
+5. Under **Build and deployment**, choose **Deploy from a branch**.
+6. Choose branch `main` and folder `/root`.
+7. Save.
+8. Wait a minute or two for GitHub to publish the site.
+
+GitHub will give you a link like:
+
+```text
+https://your-github-name.github.io/your-repo-name/
+```
+
+## Design direction
+
+This version uses a 2.5D forest style:
+
+- Angled jungle path
+- Big trees and foreground foliage
+- Camera follow
+- Layered environment
+- Larger rocks that feel like objects, not board tiles
+- T-Rex shown from behind/above instead of as a flat board piece
+
+If this still does not feel right, the next recommended direction is a side-scrolling jungle platform/adventure version.

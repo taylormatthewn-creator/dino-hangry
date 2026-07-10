@@ -1,537 +1,758 @@
 /*
-Dino Hangry Rocks - Phaser Edition
-A kid-friendly 8-bit style browser game.
-
-Controls:
-- Arrow keys or WASD: move
-- Space / Enter: stomp or attack next to the T-Rex
-- Click/tap the on-screen buttons on phones/tablets
-- On puzzle screens: click crystal pieces before the timer runs out
+Dino Hangry Rocks — Phaser 2.5D Forest Adventure
+No asset files are required. The game creates its own simple sprites/textures with Phaser graphics.
 */
 
-const TILE = 32;
-const MAP_COLS = 20;
-const MAP_ROWS = 15;
-const GAME_W = TILE * MAP_COLS;
-const GAME_H = TILE * MAP_ROWS;
-const UI_H = 160;
-const WORLD_H = GAME_H + UI_H;
+const W = 960;
+const H = 540;
+const WORLD_W = 2600;
+const WORLD_H = 1800;
 
-const COLORS = {
-  bg: 0x0f2f1f,
-  panel: 0x102f24,
-  panel2: 0x1f4b36,
-  text: '#fff6cc',
-  gold: '#ffe26a',
-  red: '#ff6b6b',
-  blue: '#87d7ff',
-  green: '#9fff93'
-};
+const SAVE_KEY = "dino_hangry_25d_save_v1";
 
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-function key(x, y) { return `${x},${y}`; }
-function manhattan(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
-function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
-function samePos(a, b) { return a.x === b.x && a.y === b.y; }
+function dist(a, b) { return Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y); }
 
 class BootScene extends Phaser.Scene {
-  constructor() { super('Boot'); }
+  constructor() { super("Boot"); }
   preload() {}
   create() {
-    this.createPixelTextures();
-    this.scene.start('Title');
-  }
-
-  createPixelTextures() {
-    const g = this.add.graphics();
-
-    const make = (name, draw) => {
-      g.clear();
-      draw(g);
-      g.generateTexture(name, TILE, TILE);
-    };
-
-    make('tile_grass1', g => {
-      g.fillStyle(0x2f8f49); g.fillRect(0,0,32,32);
-      g.fillStyle(0x3fa65a); g.fillRect(2,4,4,12); g.fillRect(20,12,4,8); g.fillRect(10,22,12,3);
-      g.fillStyle(0x1f6f3d); g.fillRect(0,30,32,2);
-    });
-    make('tile_grass2', g => {
-      g.fillStyle(0x277f42); g.fillRect(0,0,32,32);
-      g.fillStyle(0x4db963); g.fillRect(8,5,6,16); g.fillRect(18,18,8,4); g.fillRect(3,24,7,3);
-      g.fillStyle(0x1f6f3d); g.fillRect(0,30,32,2);
-    });
-    make('tree', g => {
-      g.fillStyle(0x216d35); g.fillRect(0,0,32,32);
-      g.fillStyle(0x7b4d2a); g.fillRect(13,16,6,14);
-      g.fillStyle(0x0d5229); g.fillRect(6,6,20,14); g.fillRect(9,2,14,12); g.fillRect(3,12,26,8);
-      g.fillStyle(0x39aa55); g.fillRect(9,5,5,4); g.fillRect(19,12,5,4);
-    });
-    make('rock', g => {
-      g.fillStyle(0x2f8f49); g.fillRect(0,0,32,32);
-      g.fillStyle(0x565f65); g.fillRect(6,12,20,13); g.fillRect(10,8,14,7); g.fillRect(4,18,24,6);
-      g.fillStyle(0x8a969c); g.fillRect(10,10,8,4); g.fillRect(8,17,6,3);
-      g.fillStyle(0x343a40); g.fillRect(20,18,5,3);
-    });
-    make('hardrock', g => {
-      g.fillStyle(0x2f8f49); g.fillRect(0,0,32,32);
-      g.fillStyle(0x7d6953); g.fillRect(5,11,22,14); g.fillRect(9,6,15,8); g.fillRect(3,18,26,7);
-      g.fillStyle(0xb18b66); g.fillRect(10,8,8,4); g.fillRect(7,16,6,3);
-      g.fillStyle(0x4a372c); g.fillRect(20,18,5,3);
-    });
-    make('food', g => {
-      g.fillStyle(0x2f8f49); g.fillRect(0,0,32,32);
-      g.fillStyle(0xffe0b0); g.fillRect(8,12,16,8); g.fillStyle(0xe84a3a); g.fillRect(11,9,10,10); g.fillRect(13,7,6,4);
-      g.fillStyle(0xffffff); g.fillRect(5,14,5,4); g.fillRect(22,14,5,4);
-    });
-    make('dino', g => {
-      g.fillStyle(0x00a85a); g.fillRect(6,13,17,10); g.fillRect(18,9,9,8); g.fillRect(4,20,8,5);
-      g.fillStyle(0x23d17a); g.fillRect(8,11,10,5); g.fillRect(20,8,5,3);
-      g.fillStyle(0xffffff); g.fillRect(24,11,2,2);
-      g.fillStyle(0x102010); g.fillRect(25,11,1,1);
-      g.fillStyle(0x007241); g.fillRect(9,23,4,6); g.fillRect(19,22,4,7); g.fillRect(2,17,5,3);
-      g.fillStyle(0xfff0c0); g.fillRect(25,15,4,1); g.fillRect(25,17,3,1);
-    });
-    make('ninja', g => {
-      g.fillStyle(0x23283a); g.fillRect(10,8,12,16); g.fillRect(8,13,16,10);
-      g.fillStyle(0xd4f1ff); g.fillRect(12,12,8,3);
-      g.fillStyle(0xffdb82); g.fillRect(14,13,2,2); g.fillRect(18,13,2,2);
-      g.fillStyle(0xbdd9ff); g.fillRect(23,8,3,18);
-    });
-    make('caveman', g => {
-      g.fillStyle(0x9a6131); g.fillRect(9,9,14,14); g.fillStyle(0x6b3f22); g.fillRect(7,6,18,8); g.fillRect(6,10,5,5); g.fillRect(21,10,5,5);
-      g.fillStyle(0xffc18a); g.fillRect(11,11,10,7); g.fillStyle(0x222222); g.fillRect(13,13,2,2); g.fillRect(18,13,2,2);
-      g.fillStyle(0x7d4a2a); g.fillRect(12,22,4,7); g.fillRect(18,22,4,7);
-    });
-    make('boss', g => {
-      g.fillStyle(0x5a261c); g.fillRect(5,7,22,20); g.fillStyle(0xbf6c2f); g.fillRect(8,4,16,9);
-      g.fillStyle(0xffc18a); g.fillRect(9,11,14,8); g.fillStyle(0x111111); g.fillRect(12,13,3,3); g.fillRect(18,13,3,3);
-      g.fillStyle(0xff4f4f); g.fillRect(10,20,12,3); g.fillStyle(0xcaa15a); g.fillRect(2,15,6,3); g.fillRect(24,15,6,3);
-    });
-    make('genie', g => {
-      g.fillStyle(0x2f8f49); g.fillRect(0,0,32,32);
-      g.fillStyle(0x3aa6ff); g.fillRect(10,7,12,12); g.fillRect(12,19,8,5); g.fillRect(14,23,12,4);
-      g.fillStyle(0x7bd5ff); g.fillRect(12,9,8,4);
-      g.fillStyle(0xffd36b); g.fillRect(9,5,14,3);
-    });
-    make('crystal', g => {
-      g.fillStyle(0x173850); g.fillRect(0,0,32,32);
-      g.fillStyle(0x57c7ff); g.fillRect(12,4,8,4); g.fillRect(8,8,16,8); g.fillStyle(0x2c84ff); g.fillRect(10,16,12,6); g.fillRect(13,22,6,6);
-      g.fillStyle(0xbdf2ff); g.fillRect(13,8,5,8);
-    });
-
-    g.destroy();
+    makeTextures(this);
+    this.scene.start("Title");
   }
 }
 
 class TitleScene extends Phaser.Scene {
-  constructor() { super('Title'); }
+  constructor() { super("Title"); }
   create() {
-    this.cameras.main.setBackgroundColor('#10331f');
-    this.add.rectangle(GAME_W/2, WORLD_H/2, GAME_W, WORLD_H, 0x10331f);
-    this.add.text(GAME_W/2, 80, 'DINO HANGRY ROCKS', { fontFamily: 'monospace', fontSize: '38px', color: COLORS.gold, stroke: '#000', strokeThickness: 6 }).setOrigin(0.5);
-    this.add.text(GAME_W/2, 135, '8-bit forest adventure', { fontFamily: 'monospace', fontSize: '18px', color: COLORS.text }).setOrigin(0.5);
-    this.add.image(GAME_W/2 - 42, 210, 'dino').setScale(3);
-    this.add.image(GAME_W/2 + 45, 210, 'rock').setScale(3);
-    const instructions = [
-      'Walk through the forest as a hungry T-Rex.',
-      'Smash rocks to find food before energy runs out.',
-      'Cavemen and the genie try to stop you.',
-      'At Level 6, the ninja joins your team.',
-      'Every 10 levels has a boss battle.',
-      'Between levels, solve the crystal puzzle.'
-    ];
-    this.add.text(GAME_W/2, 310, instructions.join('\n'), { fontFamily: 'monospace', fontSize: '16px', color: COLORS.text, align: 'center', lineSpacing: 8 }).setOrigin(0.5);
-    this.add.text(GAME_W/2, 430, 'Press SPACE or click to start', { fontFamily: 'monospace', fontSize: '20px', color: COLORS.green, stroke: '#000', strokeThickness: 4 }).setOrigin(0.5);
-    this.input.keyboard.once('keydown-SPACE', () => this.scene.start('Game', { level: 1, wins: 0, losses: 0, xp: 0 }));
-    this.input.once('pointerdown', () => this.scene.start('Game', { level: 1, wins: 0, losses: 0, xp: 0 }));
+    this.cameras.main.setBackgroundColor("#082114");
+    drawTitleBackground(this);
+    this.add.text(W/2, 72, "DINO HANGRY ROCKS", {
+      fontFamily: "Georgia, serif", fontSize: 48, color: "#ffe36f", stroke: "#3a1f08", strokeThickness: 8
+    }).setOrigin(0.5);
+    this.add.text(W/2, 126, "2.5D FOREST ADVENTURE", {
+      fontFamily: "Arial Black, Arial", fontSize: 22, color: "#d8ffe1", stroke: "#06150b", strokeThickness: 4
+    }).setOrigin(0.5);
+
+    this.add.image(W/2, 305, "title-card").setScale(1.1);
+
+    const box = this.add.rectangle(W/2, 454, 680, 94, 0x0f2e1d, 0.86).setStrokeStyle(3, 0xffd66b, 0.85);
+    this.add.text(W/2, 432, "Move with Arrow Keys or WASD • Stomp with Space/Enter • Roar with R", {
+      fontFamily: "Arial", fontSize: 20, color: "#fff8d9"
+    }).setOrigin(0.5);
+    this.add.text(W/2, 472, "Click or press SPACE to start", {
+      fontFamily: "Arial Black, Arial", fontSize: 26, color: "#7dff8d", stroke: "#08200e", strokeThickness: 5
+    }).setOrigin(0.5);
+
+    this.input.keyboard.once("keydown-SPACE", () => this.scene.start("Game", { level: 1 }));
+    this.input.once("pointerdown", () => this.scene.start("Game", { level: 1 }));
   }
 }
 
 class GameScene extends Phaser.Scene {
-  constructor() { super('Game'); }
+  constructor() { super("Game"); }
+
   init(data) {
     this.level = data.level || 1;
-    this.wins = data.wins || 0;
-    this.losses = data.losses || 0;
-    this.xp = data.xp || 0;
-    this.isBossLevel = this.level % 10 === 0;
   }
+
   create() {
-    this.cameras.main.setBackgroundColor('#0e2d1d');
-    this.cursors = this.input.keyboard.createCursorKeys();
-    this.keys = this.input.keyboard.addKeys('W,A,S,D,SPACE,ENTER');
-    this.busy = false;
-    this.log = [];
+    this.gameOver = false;
+    this.won = false;
+    this.lastActionTime = 0;
+    this.logs = [];
+    this.foodFound = 0;
+    this.foodNeeded = Math.min(2 + Math.floor(this.level / 5), 6);
+    this.movesLeft = Math.max(72 - Math.floor(this.level * 0.6), 42);
+    this.dinoMaxHp = 38 + Math.floor(this.level * 1.6);
+    this.dinoHp = this.dinoMaxHp;
+    this.ninjaUnlocked = this.level >= 6;
+    this.bossLevel = this.level % 10 === 0;
+    this.rockHp = 3 + Math.floor(this.level / 4);
+    this.genieTimer = 0;
 
-    this.buildLevel();
-    this.drawWorld();
-    this.drawUI();
-    this.addLog('🧞 The genie scattered rocks through the forest!');
+    this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
+    this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+    this.cameras.main.setZoom(1);
 
-    this.input.keyboard.on('keydown', (event) => {
-      if (this.busy) return;
-      const k = event.key.toLowerCase();
-      if (k === 'arrowup' || k === 'w') this.tryMove(0, -1);
-      else if (k === 'arrowdown' || k === 's') this.tryMove(0, 1);
-      else if (k === 'arrowleft' || k === 'a') this.tryMove(-1, 0);
-      else if (k === 'arrowright' || k === 'd') this.tryMove(1, 0);
-      else if (k === ' ' || k === 'enter') this.stompNearby();
-    });
+    this.createWorld();
+    this.createPlayer();
+    this.createObjects();
+    this.createHUD();
+    this.createControls();
 
-    this.createTouchControls();
+    this.cameras.main.startFollow(this.player.container, true, 0.08, 0.08);
+    this.cameras.main.setDeadzone(120, 80);
+
+    this.keys = this.input.keyboard.addKeys("UP,DOWN,LEFT,RIGHT,W,A,S,D,SPACE,ENTER,R");
+
+    this.log("🧞 The genie hid food under rocks in the jungle.");
+    if (this.ninjaUnlocked) this.log("🥷 The ninja helper is hiding in the trees and will strike nearby enemies!");
+    if (this.bossLevel) this.log("👑 Boss level! Find and defeat the mighty hunter.");
   }
 
-  buildLevel() {
-    const lvl = this.level;
-    this.player = { x: 1, y: MAP_ROWS - 2, hp: 36 + Math.floor(lvl * 1.8), maxHp: 36 + Math.floor(lvl * 1.8), food: 0 };
-    this.moves = Math.max(24, 42 - Math.floor(lvl * 0.25));
-    this.foodNeeded = Math.min(8, 2 + Math.floor(lvl / 8));
-    this.ninjaUnlocked = lvl >= 6;
-    this.ninjaHp = this.ninjaUnlocked ? 16 + Math.floor(lvl * 0.8) : 0;
-    this.ninjaPos = this.ninjaUnlocked ? { x: 2, y: MAP_ROWS - 2 } : null;
-    this.map = [];
-    this.rocks = new Map();
-    this.enemies = [];
-    this.foodSpots = new Set();
-    this.decor = new Map();
+  createWorld() {
+    this.bg = this.add.container(0, 0);
 
-    for (let y = 0; y < MAP_ROWS; y++) {
-      const row = [];
-      for (let x = 0; x < MAP_COLS; x++) {
-        const edge = x === 0 || y === 0 || x === MAP_COLS - 1 || y === MAP_ROWS - 1;
-        const tree = edge || Math.random() < 0.09;
-        row.push(tree ? 'tree' : 'grass');
-        this.decor.set(key(x, y), Math.random() < 0.5 ? 'tile_grass1' : 'tile_grass2');
-      }
-      this.map.push(row);
+    // Deep jungle background bands
+    const g = this.add.graphics();
+    g.fillGradientStyle(0x0a321c, 0x0a321c, 0x195f35, 0x0b2514, 1);
+    g.fillRect(0, 0, WORLD_W, WORLD_H);
+    this.bg.add(g);
+
+    // Winding path made of overlapping ellipses
+    this.pathGraphics = this.add.graphics();
+    this.pathGraphics.fillStyle(0xa66a2f, 1);
+    const pathPoints = [];
+    for (let y = -100; y < WORLD_H + 200; y += 88) {
+      const x = WORLD_W/2 + Math.sin(y / 210) * 340 + Math.sin(y / 95) * 85;
+      pathPoints.push({ x, y });
+      this.pathGraphics.fillEllipse(x, y, 760 - y * 0.11, 210);
+    }
+    this.pathGraphics.fillStyle(0xca8b43, 0.46);
+    for (const p of pathPoints) this.pathGraphics.fillEllipse(p.x, p.y, 500, 92);
+
+    // grass texture dots, flowers, leaf clusters
+    const deco = this.add.graphics();
+    for (let i = 0; i < 950; i++) {
+      const x = Phaser.Math.Between(0, WORLD_W);
+      const y = Phaser.Math.Between(0, WORLD_H);
+      const nearPath = Math.abs(x - (WORLD_W/2 + Math.sin(y/210)*340 + Math.sin(y/95)*85)) < 420;
+      if (nearPath && Math.random() < 0.55) continue;
+      const colors = [0x0f5a2a, 0x17793d, 0x23894b, 0x0b3d22, 0x65b644, 0xf05c3d, 0x7e55ff, 0xffc247];
+      deco.fillStyle(colors[Phaser.Math.Between(0, colors.length-1)], Phaser.Math.FloatBetween(0.45, 0.95));
+      deco.fillEllipse(x, y, Phaser.Math.Between(5, 18), Phaser.Math.Between(3, 10));
+    }
+    this.bg.add([this.pathGraphics, deco]);
+
+    // Distant scenery
+    for (let i = 0; i < 16; i++) {
+      const mountain = this.add.triangle(Phaser.Math.Between(0, WORLD_W), Phaser.Math.Between(40, 500), 0, 150, 130, 0, 260, 150, 0x2d7348, 0.35);
+      mountain.setDepth(-20);
     }
 
-    this.map[this.player.y][this.player.x] = 'grass';
-    this.map[MAP_ROWS-2][2] = 'grass';
-    this.genie = { x: MAP_COLS - 3, y: 2 };
-    this.map[this.genie.y][this.genie.x] = 'grass';
+    this.sortables = [];
+    this.obstacles = [];
 
-    const rockCount = clamp(5 + Math.floor(lvl * 0.45), 5, 25);
-    const enemyCount = this.isBossLevel ? 2 + Math.floor(lvl / 20) : clamp(1 + Math.floor(lvl / 7), 1, 8);
-    const rockHp = 3 + Math.floor(lvl * 0.8);
+    // Large trees and foreground border foliage
+    for (let i = 0; i < 120; i++) {
+      const y = Phaser.Math.Between(0, WORLD_H);
+      let x;
+      const pathX = WORLD_W/2 + Math.sin(y/210)*340 + Math.sin(y/95)*85;
+      if (Math.random() < 0.5) x = Phaser.Math.Between(0, Math.max(60, pathX - 430));
+      else x = Phaser.Math.Between(Math.min(WORLD_W - 60, pathX + 430), WORLD_W);
+      this.spawnTree(x, y, Phaser.Math.FloatBetween(0.8, 1.45));
+    }
+
+    // Foreground canopy shadows
+    const shade = this.add.graphics();
+    shade.fillStyle(0x001008, 0.2);
+    shade.fillRect(0, 0, WORLD_W, WORLD_H);
+    for (let i = 0; i < 50; i++) {
+      shade.fillStyle(0x000000, 0.10);
+      shade.fillEllipse(Phaser.Math.Between(0, WORLD_W), Phaser.Math.Between(0, WORLD_H), Phaser.Math.Between(160, 340), Phaser.Math.Between(60, 180));
+    }
+  }
+
+  spawnTree(x, y, scale=1) {
+    const trunk = this.add.image(x, y, "tree").setScale(scale);
+    trunk.setDepth(y - 40);
+    this.sortables.push(trunk);
+    this.obstacles.push({ x, y: y + 20, radius: 54 * scale });
+    // canopy layer above player adds immersive occlusion
+    const canopy = this.add.image(x, y - 86 * scale, "canopy").setScale(scale * 1.18).setAlpha(0.94);
+    canopy.setDepth(y + 210);
+    this.sortables.push(canopy);
+  }
+
+  createPlayer() {
+    const start = this.getPathPoint(WORLD_H - 180);
+    const shadow = this.add.ellipse(0, 30, 74, 24, 0x000000, 0.32);
+    const body = this.add.image(0, 0, "dino-back").setScale(1.05);
+    const label = this.add.text(0, 70, "T-REX", { fontFamily: "Arial Black", fontSize: 12, color: "#fff3bb", stroke: "#10200d", strokeThickness: 3 }).setOrigin(0.5);
+    const container = this.add.container(start.x, start.y, [shadow, body, label]);
+    this.physics.add.existing(container);
+    container.body.setCircle(25, -25, -8);
+    container.body.setCollideWorldBounds(true);
+    container.setDepth(start.y + 50);
+    this.player = { container, body, speed: 210, facing: new Phaser.Math.Vector2(0, -1), stomping: false, invuln: 0 };
+  }
+
+  createObjects() {
+    this.rocks = this.physics.add.group();
+    this.foods = this.physics.add.group();
+    this.enemies = this.physics.add.group();
+    this.projectiles = this.physics.add.group();
+    this.effects = this.add.group();
+
+    const rockCount = Math.min(4 + Math.floor(this.level * 0.45), 18);
+    const foodIndexes = new Set();
+    while (foodIndexes.size < this.foodNeeded) foodIndexes.add(Phaser.Math.Between(0, rockCount - 1));
 
     for (let i = 0; i < rockCount; i++) {
-      const p = this.emptySpotFarFromPlayer();
-      const hp = rockHp + randInt(0, Math.floor(lvl / 8));
-      this.rocks.set(key(p.x, p.y), { x: p.x, y: p.y, hp, maxHp: hp, hard: lvl >= 12 && Math.random() < 0.45 });
+      const p = this.getPathPoint(Phaser.Math.Between(140, WORLD_H - 260));
+      const offset = Phaser.Math.Between(-260, 260);
+      const rock = this.spawnRock(p.x + offset, p.y + Phaser.Math.Between(-40, 50));
+      rock.setData("hasFood", foodIndexes.has(i));
     }
 
-    const rockKeys = Array.from(this.rocks.keys());
-    Phaser.Utils.Array.Shuffle(rockKeys);
-    for (let i = 0; i < Math.min(this.foodNeeded + 1, rockKeys.length); i++) this.foodSpots.add(rockKeys[i]);
-
+    const enemyCount = this.bossLevel ? 4 + Math.floor(this.level / 10) : Math.min(1 + Math.floor(this.level / 4), 9);
     for (let i = 0; i < enemyCount; i++) {
-      const p = this.emptySpotFarFromPlayer();
-      this.enemies.push({ x: p.x, y: p.y, hp: 8 + Math.floor(lvl * 1.1), maxHp: 8 + Math.floor(lvl * 1.1), kind: 'caveman' });
+      const p = this.getPathPoint(Phaser.Math.Between(120, WORLD_H - 760));
+      this.spawnEnemy(p.x + Phaser.Math.Between(-220, 220), p.y + Phaser.Math.Between(-90, 90), false);
     }
-    if (this.isBossLevel) {
-      const p = { x: MAP_COLS - 4, y: 3 };
-      this.enemies.push({ x: p.x, y: p.y, hp: 45 + lvl * 4, maxHp: 45 + lvl * 4, kind: 'boss' });
-      this.addLog('👑 Boss level! Defeat the mighty hunter.');
+    if (this.bossLevel) {
+      const p = this.getPathPoint(180);
+      this.spawnEnemy(p.x, p.y, true);
+    }
+
+    const gp = this.getPathPoint(Phaser.Math.Between(160, 580));
+    this.genie = this.add.image(gp.x + 320, gp.y, "genie").setScale(1.05);
+    this.physics.add.existing(this.genie, true);
+    this.genie.setDepth(gp.y + 20);
+
+    if (this.ninjaUnlocked) {
+      const np = this.getPathPoint(WORLD_H - 360);
+      this.ninja = this.add.image(np.x - 150, np.y, "ninja").setScale(0.9).setAlpha(0.9);
+      this.physics.add.existing(this.ninja);
+      this.ninja.body.setCircle(18);
     }
   }
 
-  emptySpotFarFromPlayer() {
-    for (let tries = 0; tries < 500; tries++) {
-      const x = randInt(2, MAP_COLS - 3);
-      const y = randInt(2, MAP_ROWS - 3);
-      const p = { x, y };
-      if (this.map[y][x] !== 'grass') continue;
-      if (manhattan(p, this.player) < 5) continue;
-      if (samePos(p, this.genie)) continue;
-      if (this.rocks.has(key(x, y))) continue;
-      if (this.enemies.some(e => e.x === x && e.y === y)) continue;
-      return p;
-    }
-    return { x: randInt(2, MAP_COLS - 3), y: randInt(2, MAP_ROWS - 3) };
+  spawnRock(x, y) {
+    const rock = this.rocks.create(x, y, "rock-full");
+    rock.setScale(Phaser.Math.FloatBetween(0.9, 1.25));
+    rock.body.setCircle(30, 0, 8);
+    rock.setData("hp", this.rockHp);
+    rock.setData("maxHp", this.rockHp);
+    rock.setData("type", "rock");
+    rock.setDepth(y + 35);
+    rock.body.setImmovable(true);
+    return rock;
   }
 
-  drawWorld() {
-    this.worldLayer?.destroy();
-    this.worldLayer = this.add.container(0, 0);
-    for (let y = 0; y < MAP_ROWS; y++) {
-      for (let x = 0; x < MAP_COLS; x++) {
-        const tx = x * TILE + TILE / 2;
-        const ty = y * TILE + TILE / 2;
-        const base = this.map[y][x] === 'tree' ? 'tree' : this.decor.get(key(x,y));
-        this.worldLayer.add(this.add.image(tx, ty, base));
-      }
-    }
-    this.worldLayer.add(this.add.image(this.genie.x*TILE + TILE/2, this.genie.y*TILE + TILE/2, 'genie'));
-
-    for (const r of this.rocks.values()) {
-      this.worldLayer.add(this.add.image(r.x*TILE + TILE/2, r.y*TILE + TILE/2, r.hard ? 'hardrock' : 'rock'));
-      this.worldLayer.add(this.add.text(r.x*TILE + 18, r.y*TILE + 20, String(r.hp), { fontFamily: 'monospace', fontSize: '10px', color: '#ffffff', stroke: '#000', strokeThickness: 2 }));
-    }
-
-    for (const e of this.enemies) {
-      this.worldLayer.add(this.add.image(e.x*TILE + TILE/2, e.y*TILE + TILE/2, e.kind === 'boss' ? 'boss' : 'caveman'));
-      this.worldLayer.add(this.add.text(e.x*TILE + 2, e.y*TILE + 1, String(e.hp), { fontFamily: 'monospace', fontSize: '10px', color: '#ffef9c', stroke: '#000', strokeThickness: 2 }));
-    }
-
-    if (this.ninjaUnlocked && this.ninjaHp > 0 && this.ninjaPos) {
-      this.worldLayer.add(this.add.image(this.ninjaPos.x*TILE + TILE/2, this.ninjaPos.y*TILE + TILE/2, 'ninja'));
-    }
-
-    this.playerSprite = this.add.image(this.player.x*TILE + TILE/2, this.player.y*TILE + TILE/2, 'dino').setDepth(10);
-    this.worldLayer.add(this.playerSprite);
+  spawnEnemy(x, y, boss=false) {
+    const enemy = this.enemies.create(x, y, boss ? "boss" : "caveman");
+    enemy.setScale(boss ? 1.35 : 0.95);
+    enemy.body.setCircle(boss ? 30 : 22, boss ? 2 : 5, boss ? 18 : 15);
+    enemy.setData("hp", boss ? 38 + this.level * 2 : 8 + Math.floor(this.level * 1.3));
+    enemy.setData("maxHp", enemy.getData("hp"));
+    enemy.setData("boss", boss);
+    enemy.setData("cooldown", Phaser.Math.Between(500, 1600));
+    enemy.setDepth(y + 45);
+    return enemy;
   }
 
-  drawUI() {
-    this.uiLayer?.destroy();
-    this.uiLayer = this.add.container(0, GAME_H);
-    this.uiLayer.add(this.add.rectangle(GAME_W/2, UI_H/2, GAME_W, UI_H, COLORS.panel));
-    this.uiLayer.add(this.add.rectangle(GAME_W/2, 4, GAME_W, 8, 0x215b3c));
-
-    const title = this.isBossLevel ? `LEVEL ${this.level}: BOSS HUNTER BATTLE` : `LEVEL ${this.level}: FOREST ROCK SMASH`;
-    this.uiLayer.add(this.add.text(14, 18, title, { fontFamily: 'monospace', fontSize: '18px', color: COLORS.gold, stroke: '#000', strokeThickness: 3 }));
-    const ninja = this.ninjaUnlocked ? `🥷 ${this.ninjaHp} HP` : '🥷 locked until L6';
-    const hud = `🦖 HP ${this.player.hp}/${this.player.maxHp}   🍖 Food ${this.player.food}/${this.foodNeeded}   👣 Moves ${this.moves}   ⭐ XP ${this.xp}   ${ninja}`;
-    this.uiLayer.add(this.add.text(14, 46, hud, { fontFamily: 'monospace', fontSize: '14px', color: COLORS.text }));
-    this.uiLayer.add(this.add.text(14, 76, 'Move: Arrow Keys/WASD  •  Stomp/Attack: Space or Enter  •  Touch buttons also work', { fontFamily: 'monospace', fontSize: '13px', color: '#c8ffd0' }));
-
-    const logText = this.log.slice(-3).join('\n');
-    this.uiLayer.add(this.add.text(14, 103, logText, { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', wordWrap: { width: GAME_W - 28 } }));
+  getPathPoint(y) {
+    return { x: WORLD_W/2 + Math.sin(y/210)*340 + Math.sin(y/95)*85, y };
   }
 
-  createTouchControls() {
-    const makeBtn = (x, y, label, cb) => {
-      const rect = this.add.rectangle(x, y, 46, 34, 0xfff2ca).setInteractive({ useHandCursor: true }).setScrollFactor(0).setDepth(50);
-      rect.setStrokeStyle(3, 0x7f5b20);
-      const text = this.add.text(x, y, label, { fontFamily: 'monospace', fontSize: '18px', color: '#1f2b1f' }).setOrigin(0.5).setDepth(51);
-      rect.on('pointerdown', cb);
-      return [rect, text];
+  createHUD() {
+    this.hud = this.add.container(0, 0).setScrollFactor(0).setDepth(100000);
+    const top = this.add.rectangle(W/2, 36, W - 26, 62, 0x0b2114, 0.75).setStrokeStyle(2, 0xf2d078, 0.65);
+    this.hud.add(top);
+    this.hudText = this.add.text(24, 16, "", { fontFamily: "Arial Black, Arial", fontSize: 18, color: "#fff8d0", stroke: "#000000", strokeThickness: 4 });
+    this.hud.add(this.hudText);
+    this.missionText = this.add.text(W/2, 16, "", { fontFamily: "Arial Black, Arial", fontSize: 18, color: "#8dff9c", stroke: "#000", strokeThickness: 4 }).setOrigin(0.5, 0);
+    this.hud.add(this.missionText);
+
+    this.logBox = this.add.container(14, H - 124).setScrollFactor(0).setDepth(100001);
+    this.logBg = this.add.rectangle(0, 0, 430, 104, 0x102f1e, 0.82).setOrigin(0).setStrokeStyle(2, 0xffe090, 0.45);
+    this.logText = this.add.text(16, 12, "", { fontFamily: "Arial", fontSize: 16, color: "#fff6d0", wordWrap: { width: 395 }, lineSpacing: 4 });
+    this.logBox.add([this.logBg, this.logText]);
+
+    this.helpText = this.add.text(W - 22, H - 22, "Move: WASD/Arrows  •  Stomp: Space/Enter  •  Roar: R", {
+      fontFamily: "Arial", fontSize: 15, color: "#fff6d0", stroke: "#000", strokeThickness: 3
+    }).setOrigin(1).setScrollFactor(0).setDepth(100001);
+  }
+
+  createControls() {
+    this.touch = { up:false, down:false, left:false, right:false, stomp:false, roar:false };
+    const baseX = W - 142;
+    const baseY = H - 132;
+    const makeBtn = (x, y, label, key) => {
+      const c = this.add.container(x, y).setScrollFactor(0).setDepth(100002).setSize(58, 48).setInteractive({ useHandCursor: true });
+      const r = this.add.roundedRect ? null : undefined;
+      const bg = this.add.rectangle(0, 0, 58, 48, 0xfff1c6, 0.9).setStrokeStyle(3, 0x5c3b10, 0.8);
+      const t = this.add.text(0, 0, label, { fontFamily: "Arial Black", fontSize: 21, color: "#1a2c18" }).setOrigin(0.5);
+      c.add([bg, t]);
+      c.on("pointerdown", () => { this.touch[key] = true; });
+      c.on("pointerup", () => { this.touch[key] = false; });
+      c.on("pointerout", () => { this.touch[key] = false; });
+      return c;
     };
-    makeBtn(GAME_W - 78, GAME_H + 32, '↑', () => this.tryMove(0,-1));
-    makeBtn(GAME_W - 124, GAME_H + 70, '←', () => this.tryMove(-1,0));
-    makeBtn(GAME_W - 78, GAME_H + 70, '⚡', () => this.stompNearby());
-    makeBtn(GAME_W - 32, GAME_H + 70, '→', () => this.tryMove(1,0));
-    makeBtn(GAME_W - 78, GAME_H + 108, '↓', () => this.tryMove(0,1));
+    makeBtn(baseX, baseY - 56, "⬆", "up");
+    makeBtn(baseX, baseY + 56, "⬇", "down");
+    makeBtn(baseX - 64, baseY, "⬅", "left");
+    makeBtn(baseX + 64, baseY, "➡", "right");
+    makeBtn(baseX - 190, baseY + 56, "STOMP", "stomp").first.setSize?.(90,48);
+    makeBtn(baseX - 190, baseY - 8, "ROAR", "roar");
   }
 
-  isBlocked(x, y) {
-    if (x < 0 || y < 0 || x >= MAP_COLS || y >= MAP_ROWS) return true;
-    if (this.map[y][x] === 'tree') return true;
-    return false;
+  update(time, delta) {
+    if (this.gameOver) return;
+
+    this.updatePlayer(delta);
+    this.updateEnemies(time, delta);
+    this.updateProjectiles();
+    this.updateNinja(delta);
+    this.updateGenie(time);
+    this.updateDepths();
+    this.updateHUD();
+    this.checkWinLoss();
   }
 
-  tryMove(dx, dy) {
-    if (this.busy || this.moves <= 0) return;
-    const nx = this.player.x + dx;
-    const ny = this.player.y + dy;
-    if (this.isBlocked(nx, ny)) { this.addLog('🌳 Trees block the path.'); return; }
+  updatePlayer(delta) {
+    const p = this.player.container;
+    let vx = 0, vy = 0;
+    if (this.keys.LEFT.isDown || this.keys.A.isDown || this.touch.left) vx -= 1;
+    if (this.keys.RIGHT.isDown || this.keys.D.isDown || this.touch.right) vx += 1;
+    if (this.keys.UP.isDown || this.keys.W.isDown || this.touch.up) vy -= 1;
+    if (this.keys.DOWN.isDown || this.keys.S.isDown || this.touch.down) vy += 1;
 
-    const rock = this.rocks.get(key(nx, ny));
-    const enemy = this.enemies.find(e => e.x === nx && e.y === ny);
-    if (rock) this.damageRock(rock);
-    else if (enemy) this.damageEnemy(enemy);
-    else {
-      this.player.x = nx; this.player.y = ny;
-      this.moves--;
-      this.addLog('🦖 T-Rex stomp-stomps through the forest.');
+    const v = new Phaser.Math.Vector2(vx, vy);
+    if (v.length() > 0) {
+      v.normalize();
+      this.player.facing.copy(v);
+      p.body.setVelocity(v.x * this.player.speed, v.y * this.player.speed * 0.82);
+      p.scaleX = v.x < -0.1 ? -1 : v.x > 0.1 ? 1 : p.scaleX;
+      p.angle = Math.sin(this.time.now / 75) * 1.5;
+    } else {
+      p.body.setVelocity(0, 0);
+      p.angle = 0;
     }
-    this.afterPlayerAction();
-  }
 
-  stompNearby() {
-    if (this.busy || this.moves <= 0) return;
-    const dirs = [{x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0}];
-    let bestEnemy = null;
-    for (const d of dirs) {
-      const e = this.enemies.find(e => e.x === this.player.x + d.x && e.y === this.player.y + d.y);
-      if (e) { bestEnemy = e; break; }
-    }
-    if (bestEnemy) this.damageEnemy(bestEnemy);
-    else {
-      let bestRock = null;
-      for (const d of dirs) {
-        const r = this.rocks.get(key(this.player.x + d.x, this.player.y + d.y));
-        if (r) { bestRock = r; break; }
-      }
-      if (bestRock) this.damageRock(bestRock);
-      else { this.addLog('⚡ Nothing nearby to stomp.'); return; }
-    }
-    this.afterPlayerAction();
-  }
-
-  damageRock(rock) {
-    const dmg = 2 + Math.floor(this.level / 9) + (this.ninjaUnlocked && this.ninjaHp > 0 ? 1 : 0);
-    rock.hp -= dmg;
-    this.moves--;
-    this.addLog(`🪨 T-Rex smashes rock for ${dmg}!`);
-    if (rock.hp <= 0) {
-      const k = key(rock.x, rock.y);
-      this.rocks.delete(k);
-      if (this.foodSpots.has(k)) {
-        this.player.food++;
-        this.foodSpots.delete(k);
-        this.addLog('🍖 Food found! Hangry level goes down.');
-      } else {
-        this.addLog('💨 Just dusty pebbles here.');
+    // soft collision with trees and rocks
+    for (const obs of this.obstacles) {
+      const d = Phaser.Math.Distance.Between(p.x, p.y, obs.x, obs.y);
+      if (d < obs.radius + 28) {
+        const away = new Phaser.Math.Vector2(p.x - obs.x, p.y - obs.y).normalize();
+        p.x += away.x * 3.2;
+        p.y += away.y * 2.8;
       }
     }
-  }
 
-  damageEnemy(enemy) {
-    const dinoDmg = 4 + Math.floor(this.level / 7);
-    const ninjaDmg = this.ninjaUnlocked && this.ninjaHp > 0 ? 3 + Math.floor(this.level / 12) : 0;
-    enemy.hp -= dinoDmg + ninjaDmg;
-    this.moves--;
-    this.addLog(`⚔️ Team attacks for ${dinoDmg + ninjaDmg}!`);
-    if (enemy.hp <= 0) {
-      this.enemies = this.enemies.filter(e => e !== enemy);
-      this.xp += enemy.kind === 'boss' ? 25 : 5;
-      this.addLog(enemy.kind === 'boss' ? '👑 Boss defeated!' : '🧔 Caveman runs away!');
+    const stompPressed = Phaser.Input.Keyboard.JustDown(this.keys.SPACE) || Phaser.Input.Keyboard.JustDown(this.keys.ENTER) || this.touch.stomp;
+    const roarPressed = Phaser.Input.Keyboard.JustDown(this.keys.R) || this.touch.roar;
+    if (stompPressed && this.time.now - this.lastActionTime > 280) this.stomp();
+    if (roarPressed && this.time.now - this.lastActionTime > 500) this.roar();
+
+    if (this.player.invuln > 0) {
+      this.player.invuln -= delta;
+      p.alpha = this.player.invuln > 0 ? 0.55 + Math.sin(this.time.now / 45) * 0.25 : 1;
     }
   }
 
-  afterPlayerAction() {
-    this.enemyTurn();
-    this.genieTurn();
-    this.drawWorld();
-    this.drawUI();
-    this.checkEnd();
+  stomp() {
+    this.lastActionTime = this.time.now;
+    this.movesLeft = Math.max(0, this.movesLeft - 1);
+    const p = this.player.container;
+    const target = { x: p.x + this.player.facing.x * 54, y: p.y + this.player.facing.y * 46 };
+    this.cameras.main.shake(70, 0.005);
+    this.spawnDust(target.x, target.y);
+
+    let hitSomething = false;
+
+    this.rocks.children.each(rock => {
+      if (!rock.active) return;
+      if (Phaser.Math.Distance.Between(target.x, target.y, rock.x, rock.y) < 85) {
+        hitSomething = true;
+        let hp = rock.getData("hp") - (2 + Math.floor(this.level / 9));
+        rock.setData("hp", hp);
+        rock.setTint(0xfff0a0);
+        this.time.delayedCall(90, () => rock.clearTint());
+        rock.setTexture(hp <= rock.getData("maxHp") / 2 ? "rock-cracked" : "rock-full");
+        this.log("🦖 STOMP! The rock cracks.");
+        if (hp <= 0) this.breakRock(rock);
+      }
+    });
+
+    this.enemies.children.each(enemy => {
+      if (!enemy.active) return;
+      if (Phaser.Math.Distance.Between(target.x, target.y, enemy.x, enemy.y) < 86) {
+        hitSomething = true;
+        this.damageEnemy(enemy, 6 + Math.floor(this.level / 4), "🦖 The T-Rex chomps and stomps!");
+      }
+    });
+
+    if (!hitSomething) this.log("🦖 The T-Rex stomps the ground. Boom!");
   }
 
-  enemyTurn() {
-    for (const e of this.enemies) {
-      if (manhattan(e, this.player) === 1) {
-        const dmg = e.kind === 'boss' ? 5 : 2;
-        this.player.hp -= dmg;
-        this.addLog(e.kind === 'boss' ? `🏹 Boss hunter hits Dino for ${dmg}.` : `🏹 Caveman pokes Dino for ${dmg}.`);
-        continue;
+  roar() {
+    this.lastActionTime = this.time.now;
+    this.movesLeft = Math.max(0, this.movesLeft - 1);
+    const p = this.player.container;
+    const ring = this.add.circle(p.x, p.y, 30, 0xfff06d, 0.2).setDepth(p.y + 200);
+    this.tweens.add({ targets: ring, radius: 180, alpha: 0, duration: 420, onComplete: () => ring.destroy() });
+    let scared = 0;
+    this.enemies.children.each(enemy => {
+      if (!enemy.active) return;
+      if (dist(p, enemy) < 250) {
+        scared++;
+        const away = new Phaser.Math.Vector2(enemy.x - p.x, enemy.y - p.y).normalize();
+        enemy.x += away.x * 60;
+        enemy.y += away.y * 45;
+        enemy.setData("cooldown", enemy.getData("cooldown") + 800);
       }
-      const dx = Math.sign(this.player.x - e.x);
-      const dy = Math.sign(this.player.y - e.y);
-      const options = Math.abs(this.player.x - e.x) > Math.abs(this.player.y - e.y) ? [{x:dx,y:0},{x:0,y:dy}] : [{x:0,y:dy},{x:dx,y:0}];
-      for (const o of options) {
-        const nx = e.x + o.x, ny = e.y + o.y;
-        if (o.x === 0 && o.y === 0) continue;
-        if (this.isBlocked(nx, ny)) continue;
-        if (this.rocks.has(key(nx, ny))) continue;
-        if (this.enemies.some(other => other !== e && other.x === nx && other.y === ny)) continue;
-        if (nx === this.player.x && ny === this.player.y) continue;
-        e.x = nx; e.y = ny; break;
+    });
+    this.log(scared ? `🦖 ROAR! ${scared} enemy${scared > 1 ? "ies" : ""} backed away.` : "🦖 ROAR! The jungle echoes.");
+  }
+
+  breakRock(rock) {
+    const x = rock.x, y = rock.y;
+    this.spawnDust(x, y);
+    if (rock.getData("hasFood")) {
+      const food = this.foods.create(x, y, "food");
+      food.setDepth(y + 60);
+      food.body.setCircle(16);
+      this.log("🍖 Food popped out from under the rock!");
+    } else if (Math.random() < 0.14) {
+      const gem = this.add.image(x, y, "crystal").setDepth(y + 70).setScale(0.7);
+      this.tweens.add({ targets: gem, y: y - 20, alpha: 0, duration: 1200, onComplete: () => gem.destroy() });
+      this.log("💎 Crystal sparkle! Bonus XP!");
+    } else {
+      this.log("🪨 The rock shattered into pebbles.");
+    }
+    rock.destroy();
+  }
+
+  updateEnemies(time, delta) {
+    const p = this.player.container;
+    this.enemies.children.each(enemy => {
+      if (!enemy.active) return;
+      const d = dist(p, enemy);
+      const speed = enemy.getData("boss") ? 76 : 88 + this.level * 1.2;
+      if (d < 450) {
+        const dir = new Phaser.Math.Vector2(p.x - enemy.x, p.y - enemy.y).normalize();
+        enemy.body.setVelocity(dir.x * speed, dir.y * speed * 0.82);
+        enemy.scaleX = dir.x < 0 ? -Math.abs(enemy.scaleX) : Math.abs(enemy.scaleX);
+      } else enemy.body.setVelocity(0, 0);
+
+      enemy.setData("cooldown", enemy.getData("cooldown") - delta);
+      if (d < 58 && enemy.getData("cooldown") <= 0) {
+        this.hurtDino(enemy.getData("boss") ? 7 : 3, enemy.getData("boss") ? "👑 The boss hunter hits hard!" : "🧔 Caveman bonk!");
+        enemy.setData("cooldown", enemy.getData("boss") ? 1200 : 1500);
+      } else if (d < 360 && enemy.getData("cooldown") <= 0 && Math.random() < 0.8) {
+        this.throwArrow(enemy, p);
+        enemy.setData("cooldown", enemy.getData("boss") ? 1000 : 1800);
+      }
+    });
+
+    this.physics.overlap(this.player.container, this.foods, (_, food) => {
+      food.destroy();
+      this.foodFound++;
+      this.dinoHp = Math.min(this.dinoMaxHp, this.dinoHp + 5);
+      this.log("🍖 Chomp! Food calms the T-Rex's hangry-ness.");
+    });
+  }
+
+  throwArrow(enemy, target) {
+    const arrow = this.projectiles.create(enemy.x, enemy.y, "arrow");
+    const v = new Phaser.Math.Vector2(target.x - enemy.x, target.y - enemy.y).normalize();
+    arrow.body.setVelocity(v.x * 260, v.y * 260);
+    arrow.rotation = Math.atan2(v.y, v.x);
+    arrow.setData("life", 1500);
+    arrow.setDepth(enemy.y + 100);
+  }
+
+  updateProjectiles() {
+    this.projectiles.children.each(arrow => {
+      if (!arrow.active) return;
+      arrow.setData("life", arrow.getData("life") - 16);
+      if (arrow.getData("life") <= 0) arrow.destroy();
+      if (dist(this.player.container, arrow) < 34) {
+        arrow.destroy();
+        this.hurtDino(3 + Math.floor(this.level / 8), "🏹 A caveman arrow hits the T-Rex!");
+      }
+    });
+  }
+
+  updateNinja(delta) {
+    if (!this.ninja) return;
+    const p = this.player.container;
+    const toPlayer = new Phaser.Math.Vector2(p.x - 75 - this.ninja.x, p.y + 30 - this.ninja.y);
+    if (toPlayer.length() > 4) {
+      toPlayer.normalize();
+      this.ninja.body.setVelocity(toPlayer.x * 160, toPlayer.y * 130);
+    } else this.ninja.body.setVelocity(0, 0);
+    this.ninja.setDepth(this.ninja.y + 55);
+
+    this.enemies.children.each(enemy => {
+      if (!enemy.active) return;
+      if (dist(this.ninja, enemy) < 62 && Math.random() < 0.018) {
+        this.damageEnemy(enemy, 3, "🥷 Ninja strike!");
+        this.ninja.setTint(0xffffff);
+        this.time.delayedCall(90, () => this.ninja.clearTint());
+      }
+    });
+  }
+
+  updateGenie(time) {
+    this.genieTimer += 16;
+    const threshold = Math.max(6200 - this.level * 55, 3600);
+    if (this.genieTimer > threshold) {
+      this.genieTimer = 0;
+      if (this.rocks.countActive(true) < 22) {
+        const p = this.getPathPoint(Phaser.Math.Between(120, WORLD_H - 220));
+        const r = this.spawnRock(p.x + Phaser.Math.Between(-260, 260), p.y);
+        r.setData("hasFood", Math.random() < 0.18);
+        this.log("🧞 Genie trick! A new rock blocks the path.");
       }
     }
   }
 
-  genieTurn() {
-    if (Math.random() > 0.18 + this.level * 0.003) return;
-    const p = this.emptySpotFarFromPlayer();
-    const hp = 3 + Math.floor(this.level * 0.65);
-    this.rocks.set(key(p.x, p.y), { x:p.x, y:p.y, hp, maxHp:hp, hard: true });
-    this.addLog('🧞 Genie poofs in another rock!');
+  damageEnemy(enemy, amount, message) {
+    enemy.setData("hp", enemy.getData("hp") - amount);
+    enemy.setTint(0xffe16b);
+    this.time.delayedCall(80, () => enemy.clearTint());
+    this.spawnDust(enemy.x, enemy.y);
+    this.log(message);
+    if (enemy.getData("hp") <= 0) {
+      this.log(enemy.getData("boss") ? "👑 Boss defeated!" : "🧔 Caveman ran away!");
+      enemy.destroy();
+    }
   }
 
-  addLog(msg) {
-    this.log.push(msg);
-    if (this.log.length > 8) this.log.shift();
+  hurtDino(amount, message) {
+    if (this.player.invuln > 0) return;
+    this.dinoHp = Math.max(0, this.dinoHp - amount);
+    this.player.invuln = 800;
+    this.cameras.main.shake(110, 0.009);
+    this.log(message);
   }
 
-  checkEnd() {
-    if (this.player.hp <= 0 || this.moves <= 0) {
-      this.busy = true;
-      this.time.delayedCall(500, () => this.scene.start('GameOver', { won:false, level:this.level, wins:this.wins, losses:this.losses+1, xp:this.xp }));
+  spawnDust(x, y) {
+    for (let i = 0; i < 10; i++) {
+      const d = this.add.image(x, y, "dust").setScale(Phaser.Math.FloatBetween(0.35, 0.85)).setDepth(y + 120).setAlpha(0.75);
+      this.tweens.add({
+        targets: d,
+        x: x + Phaser.Math.Between(-42, 42),
+        y: y + Phaser.Math.Between(-28, 26),
+        alpha: 0,
+        scale: 0.08,
+        duration: Phaser.Math.Between(280, 520),
+        onComplete: () => d.destroy()
+      });
+    }
+  }
+
+  updateDepths() {
+    this.player.container.setDepth(this.player.container.y + 60);
+    this.rocks.children.each(o => o.setDepth(o.y + 40));
+    this.enemies.children.each(o => o.setDepth(o.y + 50));
+    this.foods.children.each(o => o.setDepth(o.y + 60));
+    if (this.genie) this.genie.setDepth(this.genie.y + 40);
+  }
+
+  updateHUD() {
+    this.hudText.setText(`🦖 HP ${this.dinoHp}/${this.dinoMaxHp}   🍖 ${this.foodFound}/${this.foodNeeded}   👣 ${this.movesLeft}   LVL ${this.level}/50   🥷 ${this.ninjaUnlocked ? "Helper" : "Locked"}`);
+    this.missionText.setText(this.bossLevel ? "BOSS LEVEL: defeat the hunter and find food!" : "Explore the jungle, stomp rocks, and find food!");
+    this.logText.setText(this.logs.slice(-4).join("\n"));
+  }
+
+  log(msg) {
+    this.logs.push(msg);
+    if (this.logs.length > 10) this.logs.shift();
+  }
+
+  checkWinLoss() {
+    if (this.dinoHp <= 0 || this.movesLeft <= 0) {
+      this.endLevel(false);
       return;
     }
-    const bossAlive = this.isBossLevel && this.enemies.some(e => e.kind === 'boss');
-    if (this.player.food >= this.foodNeeded && !bossAlive) {
-      this.busy = true;
-      this.wins++;
-      this.time.delayedCall(500, () => this.scene.start('Puzzle', { level:this.level, wins:this.wins, losses:this.losses, xp:this.xp + 3 }));
-    }
+    const noBossLeft = !this.bossLevel || this.enemies.children.entries.every(e => !e.active || !e.getData("boss"));
+    if (this.foodFound >= this.foodNeeded && noBossLeft) this.endLevel(true);
   }
-}
 
-class PuzzleScene extends Phaser.Scene {
-  constructor() { super('Puzzle'); }
-  init(data) { this.level = data.level; this.wins = data.wins; this.losses = data.losses; this.xp = data.xp; }
-  create() {
-    this.cameras.main.setBackgroundColor('#132a44');
-    this.remaining = Math.max(7, 16 - Math.floor(this.level / 5));
-    this.pieces = [];
-    this.add.text(GAME_W/2, 55, 'CRYSTAL PUZZLE', { fontFamily:'monospace', fontSize:'34px', color:'#bdf2ff', stroke:'#000', strokeThickness:6 }).setOrigin(0.5);
-    this.add.text(GAME_W/2, 96, 'Click all broken crystal pieces before time runs out!', { fontFamily:'monospace', fontSize:'15px', color:COLORS.text }).setOrigin(0.5);
-    this.timerText = this.add.text(GAME_W/2, 130, '', { fontFamily:'monospace', fontSize:'20px', color:COLORS.gold }).setOrigin(0.5);
-    const count = clamp(4 + Math.floor(this.level / 4), 4, 14);
-    for (let i=0; i<count; i++) {
-      const x = randInt(80, GAME_W - 80), y = randInt(175, GAME_H - 50);
-      const s = this.add.image(x, y, 'crystal').setScale(1.25).setInteractive({ useHandCursor:true });
-      s.angle = randInt(-20,20);
-      s.on('pointerdown', () => { s.destroy(); this.pieces = this.pieces.filter(p => p !== s); this.checkPuzzleWin(); });
-      this.pieces.push(s);
-    }
-    this.time.addEvent({ delay:1000, loop:true, callback:() => { this.remaining--; this.updateTimer(); if (this.remaining <= 0) this.puzzleDone(false); } });
-    this.updateTimer();
-  }
-  updateTimer() { this.timerText.setText(`Time: ${this.remaining}`); }
-  checkPuzzleWin() { if (this.pieces.length === 0) this.puzzleDone(true); }
-  puzzleDone(success) {
-    if (this.done) return;
-    this.done = true;
-    const next = Math.min(50, this.level + 1);
-    this.xp += success ? 5 : 1;
-    const msg = success ? '💎 Crystal fixed! Bonus XP!' : '⏰ Crystal still sparkles, but time ran out.';
-    this.add.text(GAME_W/2, WORLD_H - 95, msg, { fontFamily:'monospace', fontSize:'18px', color:success ? COLORS.green : COLORS.red, stroke:'#000', strokeThickness:4 }).setOrigin(0.5);
-    this.time.delayedCall(1200, () => {
-      if (this.level >= 50) this.scene.start('Victory', { wins:this.wins, losses:this.losses, xp:this.xp });
-      else this.scene.start('Game', { level:next, wins:this.wins, losses:this.losses, xp:this.xp });
+  endLevel(won) {
+    this.gameOver = true;
+    this.physics.pause();
+    const overlay = this.add.rectangle(W/2, H/2, W, H, 0x041008, 0.76).setScrollFactor(0).setDepth(200000);
+    const title = won ? "LEVEL COMPLETE!" : "TRY AGAIN!";
+    const color = won ? "#9cff8f" : "#ff9275";
+    this.add.text(W/2, H/2 - 80, title, {
+      fontFamily: "Arial Black, Arial", fontSize: 46, color, stroke: "#000", strokeThickness: 7
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(200001);
+    const line = won ? "The T-Rex found enough food and survived the jungle." : "The T-Rex got too tired or too hurt.";
+    this.add.text(W/2, H/2 - 16, line, { fontFamily: "Arial", fontSize: 22, color: "#fff5d5", stroke: "#000", strokeThickness: 4 }).setOrigin(0.5).setScrollFactor(0).setDepth(200001);
+    const next = won && this.level < 50 ? "Press SPACE for crystal puzzle, then next level" : "Press SPACE to restart";
+    this.add.text(W/2, H/2 + 52, next, { fontFamily: "Arial Black", fontSize: 22, color: "#ffe36f", stroke: "#000", strokeThickness: 5 }).setOrigin(0.5).setScrollFactor(0).setDepth(200001);
+    this.input.keyboard.once("keydown-SPACE", () => {
+      if (won && this.level < 50) this.scene.start("Crystal", { level: this.level + 1 });
+      else this.scene.start("Game", { level: won ? 1 : this.level });
+    });
+    this.input.once("pointerdown", () => {
+      if (won && this.level < 50) this.scene.start("Crystal", { level: this.level + 1 });
+      else this.scene.start("Game", { level: won ? 1 : this.level });
     });
   }
 }
 
-class GameOverScene extends Phaser.Scene {
-  constructor() { super('GameOver'); }
-  init(data) { Object.assign(this, data); }
+class CrystalScene extends Phaser.Scene {
+  constructor() { super("Crystal"); }
+  init(data) { this.nextLevel = data.level || 2; }
   create() {
-    this.cameras.main.setBackgroundColor('#2b1818');
-    this.add.text(GAME_W/2, 120, 'TRY AGAIN!', { fontFamily:'monospace', fontSize:'42px', color:'#ff9a8a', stroke:'#000', strokeThickness:7 }).setOrigin(0.5);
-    this.add.text(GAME_W/2, 210, `Level ${this.level} was too spicy for Dino.`, { fontFamily:'monospace', fontSize:'18px', color:COLORS.text }).setOrigin(0.5);
-    this.add.text(GAME_W/2, 275, 'Press SPACE to restart this level\nClick to return to title', { fontFamily:'monospace', fontSize:'18px', color:COLORS.gold, align:'center', lineSpacing:10 }).setOrigin(0.5);
-    this.input.keyboard.once('keydown-SPACE', () => this.scene.start('Game', { level:this.level, wins:this.wins, losses:this.losses, xp:this.xp }));
-    this.input.once('pointerdown', () => this.scene.start('Title'));
+    this.cameras.main.setBackgroundColor("#09192f");
+    for (let i = 0; i < 80; i++) {
+      this.add.circle(Phaser.Math.Between(0, W), Phaser.Math.Between(0, H), Phaser.Math.Between(1, 3), 0x88d5ff, Phaser.Math.FloatBetween(0.2, 0.8));
+    }
+    this.add.text(W/2, 64, "CRYSTAL PUZZLE", { fontFamily: "Arial Black", fontSize: 44, color: "#c99cff", stroke: "#000", strokeThickness: 7 }).setOrigin(0.5);
+    this.add.text(W/2, 112, "Drag the glowing crystal pieces into the circle before time runs out!", { fontFamily: "Arial", fontSize: 20, color: "#fff6d0" }).setOrigin(0.5);
+    this.timer = 14;
+    this.timerText = this.add.text(W/2, 158, "", { fontFamily: "Arial Black", fontSize: 24, color: "#ffe36f", stroke: "#000", strokeThickness: 5 }).setOrigin(0.5);
+    this.target = this.add.circle(W/2, 314, 88, 0x7e42ff, 0.18).setStrokeStyle(4, 0xcaa7ff, 0.95);
+    this.add.image(W/2, 314, "crystal-outline").setScale(1.5).setAlpha(0.35);
+    this.pieces = [];
+    const starts = [[190,260],[250,410],[710,240],[760,410]];
+    for (let i = 0; i < 4; i++) {
+      const piece = this.add.image(starts[i][0], starts[i][1], `crystal-piece-${i}`).setScale(1.25).setInteractive({ draggable: true, useHandCursor: true });
+      piece.setData("placed", false);
+      this.pieces.push(piece);
+    }
+    this.input.on("drag", (pointer, obj, x, y) => { obj.x = x; obj.y = y; });
+    this.input.on("dragend", (pointer, obj) => {
+      if (Phaser.Math.Distance.Between(obj.x, obj.y, W/2, 314) < 110) {
+        obj.setData("placed", true);
+        obj.x = W/2 + Phaser.Math.Between(-28, 28);
+        obj.y = 314 + Phaser.Math.Between(-28, 28);
+        obj.disableInteractive();
+        obj.setAlpha(0.92);
+      }
+    });
+    this.time.addEvent({ delay: 1000, loop: true, callback: () => this.timer-- });
+  }
+  update() {
+    this.timerText.setText(`Time: ${this.timer}`);
+    if (this.pieces.every(p => p.getData("placed"))) this.finish(true);
+    if (this.timer <= 0) this.finish(false);
+  }
+  finish(success) {
+    if (this.done) return;
+    this.done = true;
+    this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.62).setDepth(10);
+    this.add.text(W/2, H/2 - 20, success ? "CRYSTAL RESTORED!" : "TIME'S UP — KEEP GOING!", { fontFamily: "Arial Black", fontSize: 36, color: success ? "#9cffef" : "#ffd36f", stroke: "#000", strokeThickness: 7 }).setOrigin(0.5).setDepth(11);
+    this.add.text(W/2, H/2 + 40, "Press SPACE for the next forest level", { fontFamily: "Arial", fontSize: 22, color: "#fff6d0", stroke: "#000", strokeThickness: 4 }).setOrigin(0.5).setDepth(11);
+    this.input.keyboard.once("keydown-SPACE", () => this.scene.start("Game", { level: this.nextLevel }));
+    this.input.once("pointerdown", () => this.scene.start("Game", { level: this.nextLevel }));
   }
 }
 
-class VictoryScene extends Phaser.Scene {
-  constructor() { super('Victory'); }
-  init(data) { Object.assign(this, data); }
-  create() {
-    this.cameras.main.setBackgroundColor('#102f45');
-    this.add.text(GAME_W/2, 120, 'DINO LEGEND!', { fontFamily:'monospace', fontSize:'44px', color:COLORS.gold, stroke:'#000', strokeThickness:7 }).setOrigin(0.5);
-    this.add.image(GAME_W/2, 210, 'dino').setScale(4);
-    this.add.text(GAME_W/2, 320, `You cleared the first 50 levels!\nWins: ${this.wins}   Losses: ${this.losses}   XP: ${this.xp}`, { fontFamily:'monospace', fontSize:'18px', color:COLORS.text, align:'center', lineSpacing:10 }).setOrigin(0.5);
-    this.add.text(GAME_W/2, 420, 'Click to play again', { fontFamily:'monospace', fontSize:'20px', color:COLORS.green, stroke:'#000', strokeThickness:4 }).setOrigin(0.5);
-    this.input.once('pointerdown', () => this.scene.start('Title'));
+function makeTextures(scene) {
+  const g = scene.add.graphics();
+
+  // Dino from behind
+  g.clear();
+  g.fillStyle(0x000000, 0.22); g.fillEllipse(70, 118, 86, 24);
+  g.fillStyle(0x3b8f2f, 1); g.fillEllipse(70, 72, 58, 82);
+  g.fillStyle(0x2f7f2a, 1); g.fillEllipse(70, 43, 48, 42);
+  g.fillStyle(0x2b6d24, 1); g.fillTriangle(40, 83, 6, 124, 62, 104);
+  g.fillStyle(0x67b947, 1); g.fillEllipse(56, 109, 18, 28); g.fillEllipse(85, 109, 18, 28);
+  g.fillStyle(0xffa13a, 1); for (let y=30; y<100; y+=13) g.fillTriangle(70,y,64,y+10,76,y+10);
+  g.fillStyle(0xf2fff2, 1); g.fillEllipse(53, 122, 12, 7); g.fillEllipse(87, 122, 12, 7);
+  g.generateTexture("dino-back", 140, 135);
+
+  // Tree
+  g.clear();
+  g.fillStyle(0x000000, 0.28); g.fillEllipse(65, 145, 88, 24);
+  g.fillStyle(0x6a3a18, 1); g.fillRoundedRect(42, 38, 48, 115, 18);
+  g.fillStyle(0x8a5221, 1); g.fillRoundedRect(57, 40, 12, 110, 8);
+  g.fillStyle(0x0f4723, 1); g.fillEllipse(65, 36, 118, 80);
+  g.fillStyle(0x166b34, 1); g.fillEllipse(36, 64, 80, 60); g.fillEllipse(96, 64, 84, 60);
+  g.fillStyle(0x248245, 1); g.fillEllipse(65, 24, 72, 48);
+  g.generateTexture("tree", 130, 165);
+
+  g.clear();
+  g.fillStyle(0x083516, 0.96); g.fillEllipse(80, 80, 150, 100);
+  g.fillStyle(0x0f632c, 0.95); g.fillEllipse(44, 92, 98, 78); g.fillEllipse(112, 92, 105, 78);
+  g.fillStyle(0x1a8642, 0.95); g.fillEllipse(80, 53, 94, 64);
+  g.generateTexture("canopy", 160, 150);
+
+  // Rocks
+  function rockTexture(name, cracked=false) {
+    g.clear();
+    g.fillStyle(0x000000, 0.26); g.fillEllipse(55, 76, 88, 20);
+    g.fillStyle(0x8b8c86, 1); g.fillEllipse(55, 50, 82, 62);
+    g.fillStyle(0xb8b8ae, 1); g.fillEllipse(39, 36, 38, 30); g.fillEllipse(65, 34, 42, 36);
+    g.fillStyle(0x5f625c, 1); g.fillEllipse(76, 56, 35, 28);
+    g.fillStyle(0x6faa4c, 1); g.fillEllipse(46, 30, 18, 8); g.fillEllipse(74, 41, 20, 8);
+    if (cracked) { g.lineStyle(4, 0x343434, 1); g.beginPath(); g.moveTo(55,20); g.lineTo(48,43); g.lineTo(62,52); g.lineTo(54,72); g.strokePath(); }
+    g.generateTexture(name, 110, 92);
+  }
+  rockTexture("rock-full", false); rockTexture("rock-cracked", true);
+
+  // Caveman and boss
+  g.clear();
+  g.fillStyle(0x000000, 0.25); g.fillEllipse(45, 73, 58, 14);
+  g.fillStyle(0xbf7a41, 1); g.fillCircle(45, 31, 21);
+  g.fillStyle(0x55351d, 1); g.fillEllipse(45, 18, 44, 18);
+  g.fillStyle(0x8b5428, 1); g.fillTriangle(24, 52, 66, 52, 45, 82);
+  g.lineStyle(5, 0x55351d, 1); g.lineBetween(18, 48, 3, 35); g.lineBetween(70, 48, 88, 35);
+  g.fillStyle(0xffffff, 1); g.fillCircle(37, 31, 3); g.fillCircle(53, 31, 3);
+  g.generateTexture("caveman", 95, 90);
+
+  g.clear();
+  g.fillStyle(0x000000, 0.28); g.fillEllipse(60, 96, 86, 22);
+  g.fillStyle(0x7d3f1b, 1); g.fillCircle(60, 34, 28);
+  g.fillStyle(0x2b180b, 1); g.fillEllipse(60, 17, 70, 22);
+  g.fillStyle(0x65330e, 1); g.fillRoundedRect(33, 55, 56, 52, 12);
+  g.fillStyle(0xffd45e, 1); g.fillTriangle(31, 12, 43, 1, 49, 20); g.fillTriangle(89, 12, 77, 1, 71, 20);
+  g.lineStyle(7, 0x2b180b, 1); g.lineBetween(20,60,3,40); g.lineBetween(98,60,119,40);
+  g.generateTexture("boss", 125, 118);
+
+  // genie, ninja, food, arrow, dust, crystals
+  g.clear();
+  g.fillStyle(0x54d7ff, 1); g.fillCircle(38, 30, 20); g.fillStyle(0x2d73ff, 1); g.fillEllipse(38, 58, 42, 45); g.fillStyle(0xffdf68,1); g.fillRoundedRect(16, 13, 44, 8, 4); g.generateTexture("genie", 80, 90);
+  g.clear();
+  g.fillStyle(0x1a102f,1); g.fillCircle(32, 29, 19); g.fillRoundedRect(18,44,30,38,10); g.fillStyle(0xb18cff,1); g.fillRect(20,24,24,6); g.generateTexture("ninja", 70, 88);
+  g.clear();
+  g.fillStyle(0xb36420,1); g.fillEllipse(40,40,40,28); g.fillStyle(0xf5d0a5,1); g.fillCircle(65,45,11); g.fillCircle(73,48,8); g.generateTexture("food", 90, 80);
+  g.clear();
+  g.lineStyle(5, 0xc98733, 1); g.lineBetween(0,10,52,10); g.fillStyle(0xd9d9d9,1); g.fillTriangle(52,10,38,0,38,20); g.generateTexture("arrow", 58, 22);
+  g.clear();
+  g.fillStyle(0xd6bd7c, 0.9); g.fillCircle(12,12,12); g.generateTexture("dust", 24, 24);
+  g.clear();
+  g.fillStyle(0x7c4dff,1); g.fillTriangle(30,0,60,30,30,80); g.fillStyle(0x63e8ff,1); g.fillTriangle(30,0,0,30,30,80); g.generateTexture("crystal", 60, 82);
+  g.clear();
+  g.lineStyle(5, 0xcaa7ff, 1); g.strokeTriangle(50, 0, 100, 55, 50, 130); g.strokeTriangle(50, 0, 0, 55, 50, 130); g.generateTexture("crystal-outline", 105, 135);
+  for (let i=0;i<4;i++) {
+    g.clear();
+    const cols = [0x7c4dff,0x42ddff,0xc053ff,0x8ff8ff];
+    g.fillStyle(cols[i],1); g.fillTriangle(40,0,80,50,20,80); g.lineStyle(3,0xffffff,0.5); g.strokeTriangle(40,0,80,50,20,80); g.generateTexture(`crystal-piece-${i}`, 90, 90);
+  }
+
+  // title card
+  g.clear();
+  g.fillGradientStyle(0x0d5b2c,0x0d5b2c,0x7bb84d,0x144124,1); g.fillRoundedRect(0,0,520,210,24);
+  g.fillStyle(0x9b5e27,1); g.fillEllipse(260,170,450,60);
+  g.fillStyle(0x6a3a18,1); g.fillRoundedRect(35,20,50,150,14); g.fillRoundedRect(430,16,55,154,16);
+  g.fillStyle(0x8b8c86,1); g.fillEllipse(310,130,100,70); g.fillEllipse(385,120,96,64); g.fillEllipse(235,125,90,60);
+  g.fillStyle(0x3b8f2f,1); g.fillEllipse(180,124,66,88); g.fillStyle(0xffa13a,1); for(let y=75;y<143;y+=14) g.fillTriangle(180,y,173,y+10,187,y+10);
+  g.generateTexture("title-card", 520, 210);
+  g.destroy();
+}
+
+function drawTitleBackground(scene) {
+  const g = scene.add.graphics();
+  g.fillGradientStyle(0x07180f, 0x07180f, 0x1a7441, 0x082114, 1);
+  g.fillRect(0, 0, W, H);
+  for (let i=0; i<50; i++) {
+    g.fillStyle(Phaser.Math.RND.pick([0x0f5a2a,0x1d8448,0x4fb15c,0x74451c]), Phaser.Math.FloatBetween(0.2,0.85));
+    g.fillEllipse(Phaser.Math.Between(0,W), Phaser.Math.Between(0,H), Phaser.Math.Between(40,160), Phaser.Math.Between(16,60));
   }
 }
+
+// Small polyfill-style helper for rounded rectangles if the browser build uses older graphics APIs.
+Phaser.GameObjects.Graphics.prototype.fillRoundedRect = Phaser.GameObjects.Graphics.prototype.fillRoundedRect || Phaser.GameObjects.Graphics.prototype.fillRect;
 
 const config = {
   type: Phaser.AUTO,
-  parent: 'game-wrap',
-  width: GAME_W,
-  height: WORLD_H,
-  backgroundColor: '#0f2f1f',
-  pixelArt: true,
-  roundPixels: true,
-  scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH
-  },
-  scene: [BootScene, TitleScene, GameScene, PuzzleScene, GameOverScene, VictoryScene]
+  parent: "game-wrap",
+  width: W,
+  height: H,
+  backgroundColor: "#07180f",
+  physics: { default: "arcade", arcade: { debug: false } },
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scene: [BootScene, TitleScene, GameScene, CrystalScene]
 };
 
-window.addEventListener('load', () => {
-  if (!window.Phaser) {
-    document.getElementById('game-wrap').innerHTML = '<div class="fallback"><h1>Phaser did not load.</h1><p>Check your internet connection or download Phaser locally. The game uses a CDN link in index.html.</p></div>';
-    return;
-  }
-  new Phaser.Game(config);
-});
+new Phaser.Game(config);
